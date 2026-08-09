@@ -1,0 +1,73 @@
+import type { Card, GameState } from "./types";
+
+export const demoCards: Card[] = [
+  { id: "c1", top: 3, bottom: 8, suit: "coral" },
+  { id: "c2", top: 4, bottom: 7, suit: "gold" },
+  { id: "c3", top: 4, bottom: 7, suit: "mint" },
+  { id: "c4", top: 5, bottom: 6, suit: "sky" },
+  { id: "c5", top: 6, bottom: 5, suit: "violet" },
+  { id: "c6", top: 8, bottom: 3, suit: "coral" },
+  { id: "c7", top: 9, bottom: 2, suit: "mint" },
+];
+
+export const demoGame: GameState = {
+  roomCode: "DEMO",
+  phase: "playing",
+  selfId: "you",
+  hostId: "you",
+  round: 2,
+  totalRounds: 4,
+  variant: "standard",
+  mustChooseOrientation: false,
+  availableActions: {
+    show: {
+      enabled: false,
+      disabledReason: "no-legal-show",
+      ranges: demoCards.map((card) => ({
+        cardIds: [card.id],
+        kind: "single" as const,
+        legal: false,
+      })),
+    },
+    scout: {
+      enabled: true,
+      playId: "p1",
+      endpoints: ["start", "end"],
+      insertionCount: demoCards.length + 1,
+      flipped: [false, true],
+    },
+    scoutAndShow: {
+      enabled: false,
+      disabledReason: "no-combined-show",
+      playId: "p1",
+      options: [],
+    },
+  },
+  canStart: false,
+  reconnectGraceMs: 30_000,
+  activePlayerId: "you",
+  startingPlayerId: "maya",
+  players: [
+    { id: "you", name: "You", score: 12, handCount: 7, connected: true, ready: true, isHost: true, isBot: false, capturedCount: 4, scoutPoints: 2, scoutAndShowAvailable: true, scoutChips: 0 },
+    { id: "maya", name: "Maya", score: 16, handCount: 5, connected: true, ready: true, isHost: false, isBot: false, capturedCount: 6, scoutPoints: 1, scoutAndShowAvailable: false, scoutChips: 0 },
+    { id: "theo", name: "Theo", score: 9, handCount: 8, connected: true, ready: true, isHost: false, isBot: true, botDifficulty: "standard", capturedCount: 2, scoutPoints: 3, scoutAndShowAvailable: true, scoutChips: 0 },
+    { id: "jules", name: "Jules", score: 14, handCount: 6, connected: false, ready: true, isHost: false, isBot: false, capturedCount: 3, scoutPoints: 2, scoutAndShowAvailable: true, scoutChips: 0 },
+  ],
+  hand: demoCards,
+  table: [
+    {
+      id: "p1",
+      playerId: "maya",
+      cards: [
+        { id: "t1", top: 6, bottom: 5, suit: "gold" },
+        { id: "t2", top: 7, bottom: 4, suit: "violet" },
+        { id: "t3", top: 8, bottom: 3, suit: "sky" },
+      ],
+    },
+  ],
+  activity: [
+    { id: "a1", message: "Maya showed a run of three.", tone: "good" },
+    { id: "a2", message: "Theo scouted from Maya." },
+    { id: "a3", message: "It’s your turn.", tone: "warning" },
+  ],
+};

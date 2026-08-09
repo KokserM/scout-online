@@ -1,0 +1,30 @@
+import { X } from "lucide-react";
+import { AccessibleDialog } from "./AccessibleDialog";
+
+interface RulesModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function RulesModal({ open, onClose }: RulesModalProps) {
+  if (!open) return null;
+  return (
+    <AccessibleDialog className="rules-modal" labelledBy="rules-title" onClose={onClose} closeOnBackdrop>
+            <button className="icon-button modal-close" onClick={onClose} aria-label="Close rules">
+              <X />
+            </button>
+            <p className="eyebrow">TABLE GUIDE</p>
+            <h2 id="rules-title">How to take the table</h2>
+            <div className="rules-sections">
+              <article><h3>Objective</h3><p>Build sets and runs without rearranging your hand. Score the most points across all rounds.</p></article>
+              <article><h3>Your fixed hand</h3><p>At the reveal, keep your hand or rotate the entire hand 180°. That reverses and flips every card. After locking, only a Scouted card may be inserted or flipped.</p></article>
+              <article><h3>Show</h3><p>Play adjacent cards: one card, equal values (a set), or consecutive values in either direction (a run).</p></article>
+              <article><h3>Show ranking</h3><p>More cards always wins. At equal length, a set beats a run; otherwise the higher value or higher run wins. An equal Show never wins.</p></article>
+              <article><h3>Scout</h3><p>Take exactly the left or right end of the Active Set, choose its orientation, and insert it into any hand gap. The Show owner earns a point in 3–5 player games.</p></article>
+              <article><h3>Scout & Show</h3><p>Once per round in 3–5 player games, Scout and immediately Show as one move. The Show need not use the card you took.</p></article>
+              <article><h3>Ending and scoring</h3><p>A round ends when a Show empties a hand, or when every opponent Scouts an unbeaten Show. Score captures and Scout points, then subtract cards left in hand. The unbeaten Show owner skips that hand penalty.</p></article>
+              <article><h3>Two players</h3><p>Play two reserved 22-card rounds. Each player has three Scout chips. Scouting spends your chip and you act again; unused chips score points. There is no Scout & Show.</p></article>
+            </div>
+    </AccessibleDialog>
+  );
+}

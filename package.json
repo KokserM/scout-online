@@ -1,0 +1,26 @@
+{
+  "name": "grandstand",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A server-authoritative online implementation of the tabletop card game SCOUT.",
+  "packageManager": "pnpm@10.15.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n engine,shared,server,web -c yellow,green,magenta,cyan \"pnpm --filter @grandstand/game-engine dev\" \"pnpm --filter @grandstand/shared dev\" \"pnpm --filter @grandstand/server dev\" \"pnpm --filter @grandstand/web dev\"",
+    "build": "pnpm -r build",
+    "start": "pnpm --filter @grandstand/server start",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @grandstand/web test:e2e",
+    "test:simulation": "pnpm --filter @grandstand/game-engine test:simulation",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}
