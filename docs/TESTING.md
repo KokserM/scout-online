@@ -13,7 +13,7 @@ pnpm test:e2e
 If pnpm is not installed globally, the equivalent bootstrap command is:
 
 ```powershell
-npx pnpm@10.15.0 install
+npx pnpm@10.34.5 install
 ```
 
 ## Test layers
@@ -129,14 +129,14 @@ pixel-perfect rendering. Socket tests use a loopback server; rooms remain in mem
 
 ## Last complete local verification
 
-Verified on Windows on 2026-08-11 with Node.js 22.13.1 and pnpm 10.15.0:
+Verified on Windows on 2026-08-11 with Node.js 22.13.1 and pnpm 10.34.5:
 
 ```powershell
-npx --yes pnpm@10.15.0 typecheck
-npx --yes pnpm@10.15.0 test
-npx --yes pnpm@10.15.0 test:simulation
-npx --yes pnpm@10.15.0 build
-npx --yes pnpm@10.15.0 test:e2e
+npx --yes pnpm@10.34.5 typecheck
+npx --yes pnpm@10.34.5 test
+npx --yes pnpm@10.34.5 test:simulation
+npx --yes pnpm@10.34.5 build
+npx --yes pnpm@10.34.5 test:e2e
 ```
 
 - Typecheck: 4 workspace projects passed.

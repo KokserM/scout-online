@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { simulate } from "./simulation-helper.js";
 
-describe("invariant simulations", () => {
+describe("Võsu invariant simulations", () => {
   it.each([2, 3, 4, 5] as const)(
-    "completes 1,000 deterministic official %i-player games",
+    "completes 1,000 deterministic %i-player games",
     (count) => {
       for (let seed = 1; seed <= 1_000; seed += 1) {
-        const game = simulate(count, seed * 10_000 + count);
+        const game = simulate(count, seed * 10_000 + count, "vosu");
         expect(game.status.kind).toBe("ended");
         expect(game.roundNumber).toBe(game.totalRounds);
         if (game.status.kind === "ended") {
@@ -16,9 +16,4 @@ describe("invariant simulations", () => {
     },
     30_000,
   );
-
-  it("replays a full game byte-for-byte from the same seed", () => {
-    expect(simulate(4, 8675309)).toEqual(simulate(4, 8675309));
-    expect(simulate(4, 8675309, "vosu")).toEqual(simulate(4, 8675309, "vosu"));
-  });
 });

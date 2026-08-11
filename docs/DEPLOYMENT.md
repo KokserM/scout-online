@@ -37,8 +37,8 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 ```
 
-Railpack detects Node from the root `package.json` (`>=22`) and pnpm from
-`packageManager` (`pnpm@10.15.0`). It uses Corepack for that pnpm version and installs
+Railpack detects Node from the root `package.json` (`>=22.13 <25`) and pnpm from
+`packageManager` (`pnpm@10.34.5`). It uses Corepack for that pnpm version and installs
 the workspace from `pnpm-lock.yaml` before running the configured build. Railpack's Node
 install keeps development dependencies available to the build even though its build
 environment uses `NODE_ENV=production`. No custom install or dependency-pruning override

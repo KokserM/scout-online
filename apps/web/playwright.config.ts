@@ -4,12 +4,12 @@ export default defineConfig({
   testDir: "./tests",
   webServer: [
     {
-      command: "npx --yes pnpm@10.15.0 --dir ../.. --filter @grandstand/game-engine build && npx --yes pnpm@10.15.0 --dir ../.. --filter @grandstand/shared build && npx --yes pnpm@10.15.0 --dir ../.. --filter @grandstand/server dev",
+      command: "npx --yes pnpm@10.34.5 --dir ../.. --filter @grandstand/game-engine build && npx --yes pnpm@10.34.5 --dir ../.. --filter @grandstand/shared build && npx --yes pnpm@10.34.5 --dir ../.. --filter @grandstand/server dev",
       url: "http://127.0.0.1:3001/health",
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "npx --yes pnpm@10.15.0 dev --host 127.0.0.1",
+      command: "npx --yes pnpm@10.34.5 dev --host 127.0.0.1",
       url: "http://127.0.0.1:5173",
       reuseExistingServer: !process.env.CI,
     },

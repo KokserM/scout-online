@@ -73,7 +73,7 @@ room-lifetime replay cache and retired-session leave tombstones.
 ## Randomness
 
 Production Fisher–Yates draws from `CryptoRandomSource`, which uses Web Crypto
-`getRandomValues`; rejection sampling removes modulo bias. In Node 22 this is backed by
+`getRandomValues`; rejection sampling removes modulo bias. In supported Node runtimes this is backed by
 the platform CSPRNG. Tests can inject a deterministic seeded generator.
 Randomness is used only during setup; action transitions are deterministic.
 The initial starting seat is selected server-side with Node `crypto.randomInt`, then

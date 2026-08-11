@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
@@ -18,8 +18,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "test:simulation": "vitest run test/simulation.test.ts"
+    "test": "vitest run --exclude \"test/simulation*.test.ts\"",
+    "test:simulation": "vitest run test/simulation.test.ts test/simulation-vosu.test.ts"
   },
   "devDependencies": {
     "vitest": "^3.2.4"

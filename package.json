@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "A server-authoritative online implementation of the tabletop card game SCOUT.",
-  "packageManager": "pnpm@10.15.0",
+  "packageManager": "pnpm@10.34.5",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13 <25"
   },
   "scripts": {
     "dev": "concurrently -n engine,shared,server,web -c yellow,green,magenta,cyan \"pnpm --filter @grandstand/game-engine dev\" \"pnpm --filter @grandstand/shared dev\" \"pnpm --filter @grandstand/server dev\" \"pnpm --filter @grandstand/web dev\"",

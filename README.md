@@ -15,7 +15,7 @@ or an Oink Games product.
 
 ## Requirements
 
-- Node.js 22 or newer
+- Node.js 22.13 or newer (Node.js 24 LTS recommended)
 - pnpm 10
 
 On Windows PowerShell:
@@ -29,8 +29,8 @@ pnpm dev
 If the bundled Corepack is unavailable or outdated:
 
 ```powershell
-npx pnpm@10.15.0 install
-npx pnpm@10.15.0 dev
+npx pnpm@10.34.5 install
+npx pnpm@10.34.5 dev
 ```
 
 Open `http://localhost:5173`. The API and Socket.IO server listen on port `3001`.
