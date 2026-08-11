@@ -5,6 +5,43 @@ import { InMemoryRoomRepository } from "../src/room-repository.js";
 import { RoomService, ServiceError } from "../src/room-service.js";
 
 describe("game-engine adapter", () => {
+  it("projects dual VOSU hints and broadcasts the stored table mode", () => {
+    const engine = createGameEngine({ chooseStartingPlayer: (ids) => ids[0]! });
+    const first = randomUUID();
+    const second = randomUUID();
+    let state = engine.createGame([first, second], "vosu");
+    for (const playerId of [first, second]) {
+      state = engine.applyAction(state, playerId, {
+        actionId: randomUUID(),
+        type: "game:choose-orientation",
+        flipped: false,
+      });
+    }
+
+    const view = engine.getPlayerView(state, first);
+    const firstCardId = view.hand[0]!.id;
+    const singleModes = view.availableActions.show.ranges
+      .filter(
+        (range) =>
+          range.cardIds.length === 1 && range.cardIds[0] === firstCardId,
+      )
+      .map((range) => range.valueMode);
+    expect(singleModes).toEqual(["active", "opposite"]);
+
+    state = engine.applyAction(state, first, {
+      actionId: randomUUID(),
+      type: "game:show",
+      cardIds: [firstCardId],
+      valueMode: "opposite",
+    });
+    expect(engine.getPlayerView(state, first).table[0]?.valueMode).toBe(
+      "opposite",
+    );
+    expect(engine.getPlayerView(state, second).table[0]?.valueMode).toBe(
+      "opposite",
+    );
+  });
+
   it("maps engine orientation and private views onto the shared protocol", () => {
     const engine = createGameEngine();
     const first = randomUUID();
@@ -13,7 +50,12 @@ describe("game-engine adapter", () => {
     const firstView = engine.getPlayerView(state, first);
     const secondView = engine.getPlayerView(state, second);
     expect(firstView.phase).toBe("orientation");
+    expect(firstView.rulesMode).toBe("official");
     expect(firstView.hand).not.toEqual(secondView.hand);
+    expect(
+      engine.getPlayerView(engine.createGame([first, second], "vosu"), first)
+        .rulesMode,
+    ).toBe("vosu");
 
     state = engine.applyAction(state, first, {
       actionId: randomUUID(),
@@ -37,7 +79,9 @@ describe("game-engine adapter", () => {
       expect(range.cardIds.every((id) => ownIds.has(id))).toBe(true);
     }
     for (const hidden of engine.getPlayerView(state, opponent).hand) {
-      expect(JSON.stringify(playingView.availableActions)).not.toContain(hidden.id);
+      expect(JSON.stringify(playingView.availableActions)).not.toContain(
+        hidden.id,
+      );
     }
   });
 
@@ -77,12 +121,14 @@ describe("game-engine adapter", () => {
     const hostView = service.stateFor(host.room!, host.player!.id);
     const active = hostView.activePlayerId === host.player!.id ? host : guest;
     const inactive = active === host ? guest : host;
-    const inactiveCard = service.stateFor(host.room!, inactive.player!.id).hand[0]!;
+    const inactiveCard = service.stateFor(host.room!, inactive.player!.id)
+      .hand[0]!;
     expect(() =>
       service.perform(inactive.sessionToken, {
         actionId: randomUUID(),
         type: "game:show",
         cardIds: [inactiveCard.id],
+        valueMode: "active",
       }),
     ).toThrowError(ServiceError);
     expect(() =>
@@ -90,12 +136,16 @@ describe("game-engine adapter", () => {
         actionId: randomUUID(),
         type: "game:show",
         cardIds: ["forged-card"],
+        valueMode: "active",
       }),
     ).toThrowError(ServiceError);
   });
 
   it("serializes projections without opponent cards, orientations, tokens, or deck state", () => {
-    const service = new RoomService(new InMemoryRoomRepository(), createGameEngine());
+    const service = new RoomService(
+      new InMemoryRoomRepository(),
+      createGameEngine(),
+    );
     const seats = ["Alpha", "Bravo", "Charlie"].map((name, index) =>
       index === 0
         ? service.perform(undefined, {
@@ -125,7 +175,10 @@ describe("game-engine adapter", () => {
         ready: true,
       });
     }
-    service.perform(host.sessionToken, { actionId: randomUUID(), type: "game:start" });
+    service.perform(host.sessionToken, {
+      actionId: randomUUID(),
+      type: "game:start",
+    });
 
     const views = [host, bravo, charlie].map((seat) =>
       service.stateFor(host.room!, seat.player!.id),
@@ -137,7 +190,9 @@ describe("game-engine adapter", () => {
       expect(serialized).not.toContain("token");
       expect(serialized).not.toContain("initialCardIds");
       expect(serialized).not.toContain("twoPlayerRoundDecks");
-      expect(views[viewer]!.hand.every((card) => !("flipped" in card))).toBe(true);
+      expect(views[viewer]!.hand.every((card) => !("flipped" in card))).toBe(
+        true,
+      );
       for (let opponent = 0; opponent < views.length; opponent += 1) {
         if (opponent === viewer) continue;
         for (const card of views[opponent]!.hand) {
@@ -145,7 +200,9 @@ describe("game-engine adapter", () => {
         }
       }
     }
-    expect(views.every((view) => view.startingPlayerId !== undefined)).toBe(true);
+    expect(views.every((view) => view.startingPlayerId !== undefined)).toBe(
+      true,
+    );
 
     const sessions = [host, bravo, charlie];
     for (const seat of sessions) {
@@ -155,19 +212,26 @@ describe("game-engine adapter", () => {
         flipped: false,
       });
     }
-    const activeId = service.stateFor(host.room!, host.player!.id).activePlayerId!;
+    const activeId = service.stateFor(
+      host.room!,
+      host.player!.id,
+    ).activePlayerId!;
     const activeSeat = sessions.find((seat) => seat.player!.id === activeId)!;
     const activeView = service.stateFor(host.room!, activeId);
+    const activeRange = activeView.availableActions.show.ranges.find(
+      (range) => range.legal && range.cardIds.length === 1,
+    )!;
     service.perform(activeSeat.sessionToken, {
       actionId: randomUUID(),
       type: "game:show",
-      cardIds: activeView.availableActions.show.ranges.find(
-        (range) => range.legal && range.cardIds.length === 1,
-      )!.cardIds,
+      cardIds: activeRange.cardIds,
+      valueMode: activeRange.valueMode,
     });
     const afterShow = service.stateFor(host.room!, host.player!.id);
     const scoutedCardId = afterShow.table[0]!.cards[0]!.id;
-    const scoutSeat = sessions.find((seat) => seat.player!.id === afterShow.activePlayerId)!;
+    const scoutSeat = sessions.find(
+      (seat) => seat.player!.id === afterShow.activePlayerId,
+    )!;
     const scoutView = service.stateFor(host.room!, scoutSeat.player!.id);
     service.perform(scoutSeat.sessionToken, {
       actionId: randomUUID(),

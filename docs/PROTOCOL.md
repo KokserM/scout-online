@@ -22,7 +22,16 @@ and leave. Gameplay commands contain:
 - one discriminated engine intent (`CHOOSE_ORIENTATION`, `SHOW`, `SCOUT`,
   `SCOUT_AND_SHOW`, or `START_NEXT_ROUND`).
 
-The client may reference its own card IDs and requested indices. Those are untrusted
+Rooms default to `rulesMode: "official"`. Only the host may send
+`host:set-rules-mode`, and only while the room is in the lobby. The selected mode is
+locked for the game and retained by rematch. `SHOW` and `SCOUT_AND_SHOW` require a
+`valueMode` of exactly `"active"` or `"opposite"`; Official rejects `"opposite"` at the
+engine boundary, while Võsu validates the complete contiguous range using that one
+mode. Per-card or mixed modes do not exist in the wire model.
+
+The client may reference its own card IDs and requested indices. Show card arrays are
+bounded to 13, the largest reachable post-Scout hand; availability arrays and insertion
+indices are likewise bounded to engine-reachable maxima. Those fields are untrusted
 claims: the server verifies ownership, phase, turn, adjacency, orientation rights,
 strength, and all resulting state.
 
@@ -37,6 +46,7 @@ The browser sends one queued command at a time and removes it only after a match
 `state` events are generated independently for each player and contain:
 
 - public room, seat, connection, score, turn, Active Set, and history data;
+- the locked rules mode and the Active Set's uniform Show value mode;
 - that recipient's private hand and available-action hints;
 - no other player's card identities, values, order, or orientation.
 

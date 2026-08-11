@@ -1,5 +1,11 @@
 import { classifyShow, compareShows } from "./shows.js";
-import type { Card, CardId, GameState, OrientedCard, RoundState } from "./types.js";
+import type {
+  Card,
+  CardId,
+  GameState,
+  OrientedCard,
+  RoundState,
+} from "./types.js";
 
 function invariant(condition: boolean, message: string): asserts condition {
   if (!condition) {
@@ -8,11 +14,23 @@ function invariant(condition: boolean, message: string): asserts condition {
 }
 
 function checkCard(card: Card): void {
-  invariant(Number.isInteger(card.low), `${card.id} low value is not an integer`);
-  invariant(Number.isInteger(card.high), `${card.id} high value is not an integer`);
-  invariant(card.low >= 1 && card.high <= 10, `${card.id} value is out of range`);
+  invariant(
+    Number.isInteger(card.low),
+    `${card.id} low value is not an integer`,
+  );
+  invariant(
+    Number.isInteger(card.high),
+    `${card.id} high value is not an integer`,
+  );
+  invariant(
+    card.low >= 1 && card.high <= 10,
+    `${card.id} value is out of range`,
+  );
   invariant(card.low < card.high, `${card.id} values are not canonical`);
-  invariant(card.id === `${card.low}-${card.high}`, `${card.id} has a mismatched ID`);
+  invariant(
+    card.id === `${card.low}-${card.high}`,
+    `${card.id} has a mismatched ID`,
+  );
 }
 
 function collectOriented(
@@ -26,6 +44,10 @@ function collectOriented(
 }
 
 export function assertRoundInvariants(state: RoundState): void {
+  invariant(
+    state.rulesMode === "official" || state.rulesMode === "vosu",
+    "invalid rules mode",
+  );
   invariant(
     state.playerOrder.length >= 2 && state.playerOrder.length <= 5,
     "invalid player count",
@@ -58,9 +80,29 @@ export function assertRoundInvariants(state: RoundState): void {
     invariant(player.id === id, `player record key mismatch for ${id}`);
     invariant(player.scoutTokens >= 0, `${id} has negative Scout tokens`);
     invariant(
-      player.twoPlayerScoutChips >= 0 &&
-        player.twoPlayerScoutChips <= 3,
+      player.twoPlayerScoutChips >= 0 && player.twoPlayerScoutChips <= 3,
       `${id} has invalid two-player Scout chips`,
+    );
+    invariant(
+      state.variant === "two-player" || player.twoPlayerScoutChips === 0,
+      `${id} has two-player Scout chips in a standard round`,
+    );
+    invariant(
+      state.variant !== "two-player" || player.scoutTokens === 0,
+      `${id} has Scout points in a two-player round`,
+    );
+    invariant(
+      state.rulesMode !== "vosu" ||
+        (state.variant === "standard"
+          ? player.scoutAndShowAvailable
+          : player.scoutAndShowAvailable === player.twoPlayerScoutChips > 0),
+      `${id} has stale VOSU Scout & Show availability`,
+    );
+    invariant(
+      state.rulesMode !== "official" ||
+        state.variant !== "two-player" ||
+        !player.scoutAndShowAvailable,
+      `${id} can Scout & Show in official two-player rules`,
     );
     collectOriented(currentIds, player.hand);
     for (const card of player.captured) {
@@ -74,7 +116,16 @@ export function assertRoundInvariants(state: RoundState): void {
       "active show owner is absent",
     );
     invariant(state.activeShow.cards.length > 0, "active show is empty");
-    const classification = classifyShow(state.activeShow.cards);
+    invariant(
+      state.activeShow.valueMode === "active" ||
+        (state.rulesMode === "vosu" &&
+          state.activeShow.valueMode === "opposite"),
+      "active show has an invalid value mode",
+    );
+    const classification = classifyShow(
+      state.activeShow.cards,
+      state.activeShow.valueMode,
+    );
     invariant(classification !== null, "active show is invalid");
     invariant(
       compareShows(classification, state.activeShow.classification) === 0,
@@ -114,6 +165,10 @@ export function assertRoundInvariants(state: RoundState): void {
 
 export function assertGameInvariants(game: GameState): void {
   assertRoundInvariants(game.round);
+  invariant(
+    game.rulesMode === game.round.rulesMode,
+    "round rules mode differs from game",
+  );
   invariant(
     game.playerOrder.length === game.playerCount,
     "game player count is stale",

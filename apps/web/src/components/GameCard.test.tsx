@@ -46,6 +46,51 @@ describe("GameCard", () => {
     expect(container.querySelector(".game-card")).toHaveAttribute("data-palette", String(getCardDesign(card.id).palette));
   });
 
+  it("highlights an effective opposite value without changing orientation", () => {
+    const { container } = render(
+      <GameCard
+        card={card}
+        compact
+        effectiveValueMode="opposite"
+        playedOpposite
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", {
+        name: "active 3, opposite 8, effective Show value 8 from opposite, played opposite",
+      }),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".game-card")).toHaveClass(
+      "is-effective-opposite",
+    );
+    expect(container.querySelector(".card-value--playable")).toHaveTextContent(
+      "3",
+    );
+    expect(container.querySelector(".card-value--opposite")).toHaveTextContent(
+      "8",
+    );
+    expect(container.querySelector(".card-effective-badge")).toHaveTextContent(
+      "Played opposite",
+    );
+  });
+
+  it("previews active mode without presenting opposite as effective", () => {
+    const { container } = render(
+      <GameCard card={card} selected effectiveValueMode="active" />,
+    );
+
+    expect(
+      screen.getByRole("img", {
+        name: /effective Show value 3 from active, selected/i,
+      }),
+    ).toBeInTheDocument();
+    expect(container.querySelector(".game-card")).toHaveClass(
+      "is-effective-active",
+    );
+    expect(container.querySelector(".card-effective-badge")).not.toBeInTheDocument();
+  });
+
   it("derives a deterministic palette and motif from the immutable id", () => {
     const first = getCardDesign("immutable-card-42");
     const second = getCardDesign("immutable-card-42");

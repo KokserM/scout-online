@@ -9,6 +9,7 @@ import type {
   ScoutAction,
   ScoutAndShowAction,
   ShowRangeOption,
+  ShowValueMode,
 } from "./types.js";
 import { RulesError } from "./types.js";
 
@@ -27,11 +28,7 @@ function turnDisabledReason(
   if (state.status.kind !== "active") {
     return "round-ended";
   }
-  if (
-    state.playerOrder.some(
-      (id) => !playerAt(state, id).orientationChosen,
-    )
-  ) {
+  if (state.playerOrder.some((id) => !playerAt(state, id).orientationChosen)) {
     return "orientations-pending";
   }
   if (state.activePlayerId !== playerId) {
@@ -43,17 +40,26 @@ function turnDisabledReason(
 export function enumerateShowRanges(
   hand: readonly OrientedCard[],
   incumbent: RoundState["activeShow"],
+  rulesMode: RoundState["rulesMode"],
 ): readonly ShowRangeOption[] {
   const ranges: ShowRangeOption[] = [];
+  const valueModes: readonly ShowValueMode[] =
+    rulesMode === "vosu" ? ["active", "opposite"] : ["active"];
   for (let start = 0; start < hand.length; start += 1) {
     for (let end = start; end < hand.length; end += 1) {
-      const classification = classifyShow(hand.slice(start, end + 1));
-      if (classification !== null) {
-        ranges.push({
-          action: { type: "show", start, end },
-          classification,
-          legal: beatsShow(classification, incumbent?.classification ?? null),
-        });
+      for (const valueMode of valueModes) {
+        const classification = classifyShow(
+          hand.slice(start, end + 1),
+          valueMode,
+        );
+        if (classification !== null) {
+          ranges.push({
+            action: { type: "show", start, end, valueMode },
+            valueMode,
+            classification,
+            legal: beatsShow(classification, incumbent?.classification ?? null),
+          });
+        }
       }
     }
   }
@@ -82,8 +88,7 @@ function handAfterScout(
   scout: ScoutAction,
 ): readonly OrientedCard[] {
   const show = state.activeShow;
-  const selected =
-    scout.side === "left" ? show?.cards[0] : show?.cards.at(-1);
+  const selected = scout.side === "left" ? show?.cards[0] : show?.cards.at(-1);
   if (selected === undefined) {
     return hand;
   }
@@ -98,9 +103,12 @@ function handAfterScout(
 function remainingShow(state: RoundState, side: ScoutAction["side"]) {
   const cards =
     side === "left"
-      ? state.activeShow?.cards.slice(1) ?? []
-      : state.activeShow?.cards.slice(0, -1) ?? [];
-  const classification = classifyShow(cards);
+      ? (state.activeShow?.cards.slice(1) ?? [])
+      : (state.activeShow?.cards.slice(0, -1) ?? []);
+  const classification =
+    state.activeShow === null
+      ? null
+      : classifyShow(cards, state.activeShow.valueMode);
   return classification === null
     ? null
     : {
@@ -126,9 +134,16 @@ function enumerateScoutAndShowActions(
     scout: ScoutAction;
     ranges: readonly ShowRangeOption[];
   }[] = [];
-  for (const scout of enumerateScoutActions(player.hand.length, show.cards.length)) {
+  for (const scout of enumerateScoutActions(
+    player.hand.length,
+    show.cards.length,
+  )) {
     const hand = handAfterScout(player.hand, state, scout);
-    const ranges = enumerateShowRanges(hand, remainingShow(state, scout.side));
+    const ranges = enumerateShowRanges(
+      hand,
+      remainingShow(state, scout.side),
+      state.rulesMode,
+    );
     if (!ranges.some((range) => range.legal)) {
       continue;
     }
@@ -144,6 +159,7 @@ function enumerateScoutAndShowActions(
         flipped: scout.flipped,
         showStart: range.action.start,
         showEnd: range.action.end,
+        valueMode: range.action.valueMode,
       });
     }
   }
@@ -170,8 +186,14 @@ export function selectLegalActions(
 ): LegalActionOptions {
   const player = playerAt(state, playerId);
   const turnReason = turnDisabledReason(state, playerId);
-  const ranges = enumerateShowRanges(player.hand, state.activeShow);
-  const legalShows = ranges.filter((range) => range.legal).map((range) => range.action);
+  const ranges = enumerateShowRanges(
+    player.hand,
+    state.activeShow,
+    state.rulesMode,
+  );
+  const legalShows = ranges
+    .filter((range) => range.legal)
+    .map((range) => range.action);
   const showReason =
     turnReason ?? (legalShows.length === 0 ? "no-legal-show" : undefined);
   const scoutReason = scoutDisabledReason(state, player, turnReason);
@@ -181,7 +203,11 @@ export function selectLegalActions(
       : [];
 
   let combinedReason = scoutReason;
-  if (combinedReason === undefined && state.variant !== "standard") {
+  if (
+    combinedReason === undefined &&
+    state.variant !== "standard" &&
+    state.rulesMode === "official"
+  ) {
     combinedReason = "wrong-variant";
   } else if (combinedReason === undefined && !player.scoutAndShowAvailable) {
     combinedReason = "already-used";

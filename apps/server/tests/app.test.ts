@@ -130,6 +130,16 @@ describe("HTTP surface", () => {
     expect((await malformedError).code).toBe("BAD_PAYLOAD");
     expect(socket.connected).toBe(true);
 
+    const malformedMode = waitForError(socket);
+    socket.emit("game:action", {
+      actionId: randomUUID(),
+      type: "game:show",
+      cardIds: ["1-7"],
+      valueMode: "mixed",
+    });
+    expect((await malformedMode).code).toBe("BAD_PAYLOAD");
+    expect(socket.connected).toBe(true);
+
     const actionId = randomUUID();
     const acknowledged = waitForAck(socket);
     const issuedToken = waitForToken(socket);

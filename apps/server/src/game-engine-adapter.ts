@@ -21,6 +21,7 @@ import type {
   Card,
   GameAction,
   Play,
+  RulesMode,
   RoundScore,
 } from "@grandstand/shared";
 
@@ -37,6 +38,7 @@ export interface EnginePlayerView {
   phase: "orientation" | "playing" | "round-results" | "final";
   round: number;
   totalRounds: number;
+  rulesMode: RulesMode;
   variant: "standard" | "two-player";
   hand: Card[];
   table: Play[];
@@ -51,7 +53,7 @@ export interface EnginePlayerView {
 }
 
 export interface GameEngine {
-  createGame(playerIds: readonly string[]): unknown;
+  createGame(playerIds: readonly string[], rulesMode?: RulesMode): unknown;
   applyAction(state: unknown, playerId: string, action: GameAction): unknown;
   getPlayerView(state: unknown, playerId: string): EnginePlayerView;
   assertState?(state: unknown): void;
@@ -74,12 +76,12 @@ export interface GameEngineOptions {
 export function createGameEngine(options: GameEngineOptions = {}): GameEngine {
   const rng = options.rng ?? new CryptoRandomSource();
   return {
-    createGame: (playerIds) => {
+    createGame: (playerIds, rulesMode = "official") => {
       const startingPlayer =
         options.chooseStartingPlayer?.(playerIds) ??
         playerIds[randomInt(playerIds.length)];
       if (!startingPlayer) throw new Error("A game requires players");
-      const game = createGame(playerIds, rng, startingPlayer);
+      const game = createGame(playerIds, rng, startingPlayer, rulesMode);
       assertGameInvariants(game);
       return game;
     },
@@ -96,7 +98,11 @@ export function createGameEngine(options: GameEngineOptions = {}): GameEngine {
         case "game:show":
         case "game:scout":
         case "game:scout-and-show":
-          next = applyGameAction(game, playerId, toEngineAction(game, playerId, action));
+          next = applyGameAction(
+            game,
+            playerId,
+            toEngineAction(game, playerId, action),
+          );
           break;
         case "game:start":
         case "game:rematch":
@@ -114,7 +120,11 @@ export function createGameEngine(options: GameEngineOptions = {}): GameEngine {
     chooseBotAction: (state, playerId, difficulty = "standard") => {
       const game = asGameState(state);
       const privateView = toPrivatePlayerView(game.round, playerId);
-      if (!privateView.players.every((player) => game.round.players[player.id]?.orientationChosen)) {
+      if (
+        !privateView.players.every(
+          (player) => game.round.players[player.id]?.orientationChosen,
+        )
+      ) {
         return {
           actionId: randomUUID(),
           type: "game:choose-orientation",
@@ -142,16 +152,19 @@ function buildView(game: GameState, playerId: string): EnginePlayerView {
       ? "final"
       : game.round.status.kind === "ended"
         ? "round-results"
-        : view.players.some((player) => !game.round.players[player.id]?.orientationChosen)
+        : view.players.some(
+              (player) => !game.round.players[player.id]?.orientationChosen,
+            )
           ? "orientation"
           : "playing";
   const activeShow = view.activeShow;
   const roundScores =
     game.round.status.kind === "ended"
       ? view.players.map((player) => {
-          const result = game.round.status.kind === "ended"
-            ? game.round.status.result
-            : undefined;
+          const result =
+            game.round.status.kind === "ended"
+              ? game.round.status.result
+              : undefined;
           if (!result) throw new Error("Round result disappeared");
           return {
             playerId: player.id,
@@ -169,6 +182,7 @@ function buildView(game: GameState, playerId: string): EnginePlayerView {
     phase,
     round: game.roundNumber,
     totalRounds: game.totalRounds,
+    rulesMode: view.rulesMode,
     variant: view.variant,
     hand: view.hand.map(toProtocolCard),
     table:
@@ -179,6 +193,7 @@ function buildView(game: GameState, playerId: string): EnginePlayerView {
               id: showId(game),
               playerId: activeShow.ownerId,
               cards: activeShow.cards.map(toProtocolCard),
+              valueMode: activeShow.valueMode,
             },
           ],
     ...(phase === "playing" ? { activePlayerId: view.activePlayerId } : {}),
@@ -228,6 +243,7 @@ function projectAvailableActions(
         .slice(range.action.start, range.action.end + 1)
         .map(({ card }) => card.id),
       kind: range.classification.kind,
+      valueMode: range.valueMode,
       legal: range.legal,
     })),
   };
@@ -247,7 +263,8 @@ function projectAvailableActions(
     insertionCount:
       selected.scout.actions.length === 0
         ? 0
-        : Math.max(...selected.scout.actions.map((action) => action.insertAt)) + 1,
+        : Math.max(...selected.scout.actions.map((action) => action.insertAt)) +
+          1,
     flipped: [
       ...new Set(selected.scout.actions.map((action) => action.flipped)),
     ],
@@ -279,6 +296,7 @@ function projectAvailableActions(
           .slice(range.action.start, range.action.end + 1)
           .map(({ card }) => card.id),
         kind: range.classification.kind,
+        valueMode: range.valueMode,
         legal: range.legal,
       })),
     });
@@ -300,38 +318,63 @@ function projectAvailableActions(
 function toEngineAction(
   game: GameState,
   playerId: string,
-  action: Extract<GameAction, { type: "game:show" | "game:scout" | "game:scout-and-show" }>,
+  action: Extract<
+    GameAction,
+    { type: "game:show" | "game:scout" | "game:scout-and-show" }
+  >,
 ): EngineAction {
   const player = game.round.players[playerId];
   if (!player) throw new Error("Unknown player");
   if (action.type === "game:show") {
     const [start, end] = contiguousRange(player.hand, action.cardIds);
-    return { type: "show", start, end };
+    return { type: "show", start, end, valueMode: action.valueMode };
   }
-  if (action.playId !== showId(game)) throw new Error("The referenced show is no longer active");
+  if (action.playId !== showId(game))
+    throw new Error("The referenced show is no longer active");
   const activeShow = game.round.activeShow;
   if (!activeShow) throw new Error("There is no active show");
   const side = action.position === "start" ? "left" : "right";
   const insertAt = action.insertAt ?? player.hand.length;
   const flipped = action.flipped ?? false;
-  if (action.type === "game:scout") return { type: "scout", side, insertAt, flipped };
+  if (action.type === "game:scout")
+    return { type: "scout", side, insertAt, flipped };
 
-  const selected = side === "left" ? activeShow.cards[0] : activeShow.cards.at(-1);
+  const selected =
+    side === "left" ? activeShow.cards[0] : activeShow.cards.at(-1);
   if (!selected) throw new Error("The active show is empty");
   const inserted: OrientedCard = { card: selected.card, flipped };
-  const resultingHand = [...player.hand.slice(0, insertAt), inserted, ...player.hand.slice(insertAt)];
+  const resultingHand = [
+    ...player.hand.slice(0, insertAt),
+    inserted,
+    ...player.hand.slice(insertAt),
+  ];
   const [showStart, showEnd] = contiguousRange(resultingHand, action.cardIds);
-  return { type: "scout-and-show", side, insertAt, flipped, showStart, showEnd };
+  return {
+    type: "scout-and-show",
+    side,
+    insertAt,
+    flipped,
+    showStart,
+    showEnd,
+    valueMode: action.valueMode,
+  };
 }
 
-function fromEngineAction(game: GameState, playerId: string, action: EngineAction): GameAction {
+function fromEngineAction(
+  game: GameState,
+  playerId: string,
+  action: EngineAction,
+): GameAction {
   const player = game.round.players[playerId];
   if (!player) throw new Error("Unknown bot");
   if (action.type === "show") {
     return {
       actionId: randomUUID(),
       type: "game:show",
-      cardIds: player.hand.slice(action.start, action.end + 1).map(({ card }) => card.id),
+      cardIds: player.hand
+        .slice(action.start, action.end + 1)
+        .map(({ card }) => card.id),
+      valueMode: action.valueMode,
     };
   }
   const position = action.side === "left" ? "start" : "end";
@@ -346,7 +389,8 @@ function fromEngineAction(game: GameState, playerId: string, action: EngineActio
     };
   }
   const activeShow = game.round.activeShow;
-  const selected = action.side === "left" ? activeShow?.cards[0] : activeShow?.cards.at(-1);
+  const selected =
+    action.side === "left" ? activeShow?.cards[0] : activeShow?.cards.at(-1);
   if (!selected) throw new Error("Bot action references a missing show");
   const resultingHand = [
     ...player.hand.slice(0, action.insertAt),
@@ -360,11 +404,17 @@ function fromEngineAction(game: GameState, playerId: string, action: EngineActio
     position,
     insertAt: action.insertAt,
     flipped: action.flipped,
-    cardIds: resultingHand.slice(action.showStart, action.showEnd + 1).map(({ card }) => card.id),
+    cardIds: resultingHand
+      .slice(action.showStart, action.showEnd + 1)
+      .map(({ card }) => card.id),
+    valueMode: action.valueMode,
   };
 }
 
-function contiguousRange(hand: readonly OrientedCard[], cardIds: readonly string[]): [number, number] {
+function contiguousRange(
+  hand: readonly OrientedCard[],
+  cardIds: readonly string[],
+): [number, number] {
   const start = hand.findIndex(({ card }) => card.id === cardIds[0]);
   if (start < 0) throw new Error("A selected card is not in the hand");
   for (let offset = 0; offset < cardIds.length; offset += 1) {
@@ -378,7 +428,13 @@ function contiguousRange(hand: readonly OrientedCard[], cardIds: readonly string
 function toProtocolCard(oriented: OrientedCard): Card {
   const { card, flipped } = oriented;
   const suits = ["coral", "gold", "mint", "sky", "violet"] as const;
-  const suit = suits[[...card.id].reduce((total, character) => total + character.charCodeAt(0), 0) % suits.length]!;
+  const suit =
+    suits[
+      [...card.id].reduce(
+        (total, character) => total + character.charCodeAt(0),
+        0,
+      ) % suits.length
+    ]!;
   return {
     id: card.id,
     top: flipped ? card.high : card.low,
@@ -389,7 +445,9 @@ function toProtocolCard(oriented: OrientedCard): Card {
 
 function showId(game: GameState): string {
   const show = game.round.activeShow;
-  return show ? `show_${game.roundNumber}_${game.round.turnNumber}_${show.ownerId}` : "show_none";
+  return show
+    ? `show_${game.roundNumber}_${game.round.turnNumber}_${show.ownerId}`
+    : "show_none";
 }
 
 function asGameState(state: unknown): GameState {

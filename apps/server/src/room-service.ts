@@ -106,23 +106,37 @@ export class RoomService {
 
   expireDisconnected(token: string): Room | undefined {
     const session = this.repository.getBySessionToken(token);
-    if (!session || session.player.connected || session.player.disconnectedAt === undefined) return undefined;
-    if (this.now() - session.player.disconnectedAt < this.reconnectGraceMs) return undefined;
+    if (
+      !session ||
+      session.player.connected ||
+      session.player.disconnectedAt === undefined
+    )
+      return undefined;
+    if (this.now() - session.player.disconnectedAt < this.reconnectGraceMs)
+      return undefined;
     if (session.room.engineState !== undefined) {
       session.player.isBot = true;
       session.player.botDifficulty = "standard";
       session.player.connected = true;
       delete session.player.disconnectedAt;
       this.transferHostFromBot(session.room);
-      session.room.activity.push(this.activity(`${session.player.name} is now controlled by a bot.`));
+      session.room.activity.push(
+        this.activity(`${session.player.name} is now controlled by a bot.`),
+      );
       session.room.updatedAt = this.now();
       this.repository.save(session.room);
-      this.retiredSessions.set(token, { reason: "forfeited", actions: new Map() });
+      this.retiredSessions.set(token, {
+        reason: "forfeited",
+        actions: new Map(),
+      });
       this.runBots(session.room);
       return session.room;
     }
     const changed = this.removePlayer(session.room, session.player.id);
-    this.retiredSessions.set(token, { reason: "forfeited", actions: new Map() });
+    this.retiredSessions.set(token, {
+      reason: "forfeited",
+      actions: new Map(),
+    });
     return changed;
   }
 
@@ -132,7 +146,9 @@ export class RoomService {
       action.type === "room:quick-play" ||
       action.type === "room:join"
     ) {
-      const existing = token ? this.repository.getBySessionToken(token) : undefined;
+      const existing = token
+        ? this.repository.getBySessionToken(token)
+        : undefined;
       if (existing) {
         const previous = existing.room.processedActions.get(action.actionId);
         if (
@@ -145,21 +161,32 @@ export class RoomService {
             ack: { actionId: action.actionId, ok: true, duplicate: true },
           };
         }
-        if (previous) throw new ServiceError("ACTION_CONFLICT", "The action ID is already in use");
-        throw new ServiceError("INVALID_STATE", "Leave the current room before creating or joining another");
+        if (previous)
+          throw new ServiceError(
+            "ACTION_CONFLICT",
+            "The action ID is already in use",
+          );
+        throw new ServiceError(
+          "INVALID_STATE",
+          "Leave the current room before creating or joining another",
+        );
       }
       if (action.type === "room:create") return this.createRoom(action);
-      if (action.type === "room:quick-play") return this.createQuickPlay(action);
+      if (action.type === "room:quick-play")
+        return this.createQuickPlay(action);
       return this.joinRoom(action);
     }
 
-    if (!token) throw new ServiceError("UNAUTHENTICATED", "A valid session is required");
+    if (!token)
+      throw new ServiceError("UNAUTHENTICATED", "A valid session is required");
     const session = this.repository.getBySessionToken(token);
     if (!session || session.player.isBot) {
       const retired = this.retiredSessions.get(token);
       const fingerprint = actionFingerprint(action);
       if (retired?.actions.get(action.actionId) === fingerprint) {
-        return { ack: { actionId: action.actionId, ok: true, duplicate: true } };
+        return {
+          ack: { actionId: action.actionId, ok: true, duplicate: true },
+        };
       }
       if (retired?.reason === "forfeited") {
         throw new ServiceError(
@@ -167,14 +194,23 @@ export class RoomService {
           "Your seat was forfeited after the reconnect grace period. Rejoin a new room.",
         );
       }
-      throw new ServiceError("UNAUTHENTICATED", "The session is invalid or expired");
+      throw new ServiceError(
+        "UNAUTHENTICATED",
+        "The session is invalid or expired",
+      );
     }
 
     const fingerprint = actionFingerprint(action);
     const previous = session.room.processedActions.get(action.actionId);
     if (previous) {
-      if (previous.playerId !== session.player.id || previous.fingerprint !== fingerprint) {
-        throw new ServiceError("ACTION_CONFLICT", "The action ID was already used for a different action");
+      if (
+        previous.playerId !== session.player.id ||
+        previous.fingerprint !== fingerprint
+      ) {
+        throw new ServiceError(
+          "ACTION_CONFLICT",
+          "The action ID was already used for a different action",
+        );
       }
       return {
         room: session.room,
@@ -197,7 +233,12 @@ export class RoomService {
         ack: { actionId: action.actionId, ok: true, duplicate: false },
       };
     }
-    this.rememberAction(session.room, action.actionId, session.player.id, fingerprint);
+    this.rememberAction(
+      session.room,
+      action.actionId,
+      session.player.id,
+      fingerprint,
+    );
     session.room.updatedAt = this.now();
     this.repository.save(session.room);
     this.runBots(session.room);
@@ -210,16 +251,27 @@ export class RoomService {
 
   stateFor(room: Room, playerId: string): PlayerState {
     const self = room.players.get(playerId);
-    if (!self) throw new ServiceError("UNAUTHENTICATED", "Player no longer belongs to this room");
-    if (room.engineState !== undefined) this.engine.assertState?.(room.engineState);
-    const engineView = room.engineState === undefined ? undefined : this.engine.getPlayerView(room.engineState, playerId);
+    if (!self)
+      throw new ServiceError(
+        "UNAUTHENTICATED",
+        "Player no longer belongs to this room",
+      );
+    if (room.engineState !== undefined)
+      this.engine.assertState?.(room.engineState);
+    const engineView =
+      room.engineState === undefined
+        ? undefined
+        : this.engine.getPlayerView(room.engineState, playerId);
     const summaries = engineView?.players ?? {};
     const phase = engineView?.phase ?? "lobby";
     const players = [...room.players.values()].map((player) => ({
       id: player.id,
       name: player.name,
       score: summaries[player.id]?.score ?? 0,
-      handCount: player.id === playerId ? (engineView?.hand.length ?? 0) : (summaries[player.id]?.handCount ?? 0),
+      handCount:
+        player.id === playerId
+          ? (engineView?.hand.length ?? 0)
+          : (summaries[player.id]?.handCount ?? 0),
       connected: player.connected,
       ready: player.ready,
       isHost: player.id === room.hostId,
@@ -227,10 +279,14 @@ export class RoomService {
       ...(player.botDifficulty ? { botDifficulty: player.botDifficulty } : {}),
       capturedCount: summaries[player.id]?.capturedCount ?? 0,
       scoutPoints: summaries[player.id]?.scoutPoints ?? 0,
-      scoutAndShowAvailable: summaries[player.id]?.scoutAndShowAvailable ?? false,
+      scoutAndShowAvailable:
+        summaries[player.id]?.scoutAndShowAvailable ?? false,
       scoutChips: summaries[player.id]?.scoutChips ?? 0,
       ...(phase === "orientation"
-        ? { orientationChosen: !engineView?.pendingOrientationPlayerIds?.includes(player.id) }
+        ? {
+            orientationChosen:
+              !engineView?.pendingOrientationPlayerIds?.includes(player.id),
+          }
         : {}),
     }));
     const canStart =
@@ -247,17 +303,27 @@ export class RoomService {
       players,
       hand: engineView?.hand ?? [],
       table: engineView?.table ?? [],
-      ...(engineView?.activePlayerId ? { activePlayerId: engineView.activePlayerId } : {}),
-      ...(engineView?.startingPlayerId ? { startingPlayerId: engineView.startingPlayerId } : {}),
-      ...(engineView?.scoutTargetId ? { scoutTargetId: engineView.scoutTargetId } : {}),
+      ...(engineView?.activePlayerId
+        ? { activePlayerId: engineView.activePlayerId }
+        : {}),
+      ...(engineView?.startingPlayerId
+        ? { startingPlayerId: engineView.startingPlayerId }
+        : {}),
+      ...(engineView?.scoutTargetId
+        ? { scoutTargetId: engineView.scoutTargetId }
+        : {}),
       round: engineView?.round ?? 1,
       totalRounds: engineView?.totalRounds ?? Math.max(2, room.players.size),
-      variant: engineView?.variant ?? (room.players.size === 2 ? "two-player" : "standard"),
+      rulesMode: engineView?.rulesMode ?? room.rulesMode,
+      variant:
+        engineView?.variant ??
+        (room.players.size === 2 ? "two-player" : "standard"),
       mustChooseOrientation:
         engineView?.pendingOrientationPlayerIds?.includes(playerId) ?? false,
-      availableActions:
-        engineView?.availableActions ?? lobbyAvailableActions,
-      ...(engineView?.roundScores ? { roundScores: engineView.roundScores } : {}),
+      availableActions: engineView?.availableActions ?? lobbyAvailableActions,
+      ...(engineView?.roundScores
+        ? { roundScores: engineView.roundScores }
+        : {}),
       activity: [...room.activity, ...(engineView?.activity ?? [])].slice(-30),
       canStart,
       reconnectGraceMs: this.reconnectGraceMs,
@@ -267,7 +333,8 @@ export class RoomService {
   statesForConnectedPlayers(room: Room): ReadonlyMap<string, PlayerState> {
     const states = new Map<string, PlayerState>();
     for (const player of room.players.values()) {
-      if (player.connected && !player.isBot) states.set(player.id, this.stateFor(room, player.id));
+      if (player.connected && !player.isBot)
+        states.set(player.id, this.stateFor(room, player.id));
     }
     return states;
   }
@@ -276,36 +343,47 @@ export class RoomService {
     return this.repository.list().map((room) => ({
       code: room.code,
       hostId: room.hostId,
+      rulesMode: room.rulesMode,
       phase:
         room.engineState === undefined
           ? "lobby"
           : this.engine.getPlayerView(room.engineState, room.hostId).phase,
-      players: [...room.players.values()].map(({ id, name, isBot, ready, connected }) => ({
-        id,
-        name,
-        isBot,
-        ready,
-        connected,
-      })),
+      players: [...room.players.values()].map(
+        ({ id, name, isBot, ready, connected }) => ({
+          id,
+          name,
+          isBot,
+          ready,
+          connected,
+        }),
+      ),
       processedActionCount: room.processedActions.size,
       createdAt: room.createdAt,
       updatedAt: room.updatedAt,
     }));
   }
 
-  private createRoom(action: Extract<ClientAction, { type: "room:create" }>): ActionResult {
+  private createRoom(
+    action: Extract<ClientAction, { type: "room:create" }>,
+  ): ActionResult {
     const player = this.newPlayer(action.name, false, true);
     const now = this.now();
     const room: Room = {
       code: this.newRoomCode(),
       hostId: player.id,
+      rulesMode: "official",
       players: new Map([[player.id, player]]),
       processedActions: new Map(),
       activity: [this.activity(`${player.name} created the room.`)],
       createdAt: now,
       updatedAt: now,
     };
-    this.rememberAction(room, action.actionId, player.id, actionFingerprint(action));
+    this.rememberAction(
+      room,
+      action.actionId,
+      player.id,
+      actionFingerprint(action),
+    );
     this.repository.save(room);
     return {
       room,
@@ -324,7 +402,11 @@ export class RoomService {
       name: action.name,
     });
     const room = result.room;
-    if (!room) throw new ServiceError("INTERNAL_ERROR", "Quick Play room was not created");
+    if (!room)
+      throw new ServiceError(
+        "INTERNAL_ERROR",
+        "Quick Play room was not created",
+      );
     room.processedActions.set(action.actionId, {
       playerId: result.player?.id ?? "",
       fingerprint: actionFingerprint(action),
@@ -333,26 +415,46 @@ export class RoomService {
       const bot = this.newPlayer(name, true, true, "standard");
       room.players.set(bot.id, bot);
     }
-    room.activity.push(this.activity("Two Standard bots joined for Quick Play."));
-    room.engineState = this.engine.createGame([...room.players.keys()]);
+    room.activity.push(
+      this.activity("Two Standard bots joined for Quick Play."),
+    );
+    room.rulesMode = "official";
+    room.engineState = this.engine.createGame(
+      [...room.players.keys()],
+      "official",
+    );
     room.updatedAt = this.now();
     this.repository.save(room);
     this.runBots(room);
     return result;
   }
 
-  private joinRoom(action: Extract<ClientAction, { type: "room:join" }>): ActionResult {
+  private joinRoom(
+    action: Extract<ClientAction, { type: "room:join" }>,
+  ): ActionResult {
     const room = this.repository.get(action.roomCode);
     if (!room) throw new ServiceError("ROOM_NOT_FOUND", "Room not found");
-    if (room.engineState !== undefined) throw new ServiceError("INVALID_STATE", "The game has already started");
-    if (room.players.size >= MAX_PLAYERS) throw new ServiceError("ROOM_FULL", "The room is full");
-    if ([...room.players.values()].some((player) => player.name.toLocaleLowerCase() === action.name.toLocaleLowerCase())) {
+    if (room.engineState !== undefined)
+      throw new ServiceError("INVALID_STATE", "The game has already started");
+    if (room.players.size >= MAX_PLAYERS)
+      throw new ServiceError("ROOM_FULL", "The room is full");
+    if (
+      [...room.players.values()].some(
+        (player) =>
+          player.name.toLocaleLowerCase() === action.name.toLocaleLowerCase(),
+      )
+    ) {
       throw new ServiceError("NAME_TAKEN", "That name is already in use");
     }
     const player = this.newPlayer(action.name, false, false);
     room.players.set(player.id, player);
     room.activity.push(this.activity(`${player.name} joined the room.`));
-    this.rememberAction(room, action.actionId, player.id, actionFingerprint(action));
+    this.rememberAction(
+      room,
+      action.actionId,
+      player.id,
+      actionFingerprint(action),
+    );
     room.updatedAt = this.now();
     this.repository.save(room);
     return {
@@ -379,10 +481,18 @@ export class RoomService {
       case "host:add-bot": {
         this.requireHost(room, player);
         this.requireLobby(room);
-        if (room.players.size >= MAX_PLAYERS) throw new ServiceError("ROOM_FULL", "The room is full");
-        const botNumber = [...room.players.values()].filter((candidate) => candidate.isBot).length + 1;
+        if (room.players.size >= MAX_PLAYERS)
+          throw new ServiceError("ROOM_FULL", "The room is full");
+        const botNumber =
+          [...room.players.values()].filter((candidate) => candidate.isBot)
+            .length + 1;
         const name = action.name ?? `Bot ${botNumber}`;
-        if ([...room.players.values()].some((candidate) => candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+        if (
+          [...room.players.values()].some(
+            (candidate) =>
+              candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+          )
+        ) {
           throw new ServiceError("NAME_TAKEN", "That name is already in use");
         }
         const bot = this.newPlayer(name, true, true, action.difficulty);
@@ -394,42 +504,80 @@ export class RoomService {
         this.requireHost(room, player);
         this.requireLobby(room);
         const target = room.players.get(action.playerId);
-        if (!target?.isBot) throw new ServiceError("INVALID_ACTION", "Only bots can be removed");
+        if (!target?.isBot)
+          throw new ServiceError("INVALID_ACTION", "Only bots can be removed");
         room.players.delete(target.id);
         room.activity.push(this.activity(`${target.name} was removed.`));
         return;
       }
+      case "host:set-rules-mode":
+        this.requireHost(room, player);
+        this.requireLobby(room);
+        room.rulesMode = action.rulesMode;
+        room.activity.push(
+          this.activity(
+            `Rules mode changed to ${action.rulesMode === "official" ? "Official" : "Võsu"}.`,
+          ),
+        );
+        return;
       case "game:start":
         this.requireHost(room, player);
         this.requireLobby(room);
-        if (room.players.size < 2) throw new ServiceError("INVALID_STATE", "At least two players are required");
-        if ([...room.players.values()].some((candidate) => !candidate.isBot && !candidate.ready)) {
-          throw new ServiceError("INVALID_STATE", "All human players must be ready");
+        if (room.players.size < 2)
+          throw new ServiceError(
+            "INVALID_STATE",
+            "At least two players are required",
+          );
+        if (
+          [...room.players.values()].some(
+            (candidate) => !candidate.isBot && !candidate.ready,
+          )
+        ) {
+          throw new ServiceError(
+            "INVALID_STATE",
+            "All human players must be ready",
+          );
         }
         try {
-          room.engineState = this.engine.createGame([...room.players.keys()]);
+          room.engineState = this.engine.createGame(
+            [...room.players.keys()],
+            room.rulesMode,
+          );
         } catch (error: unknown) {
-          throw new ServiceError("INVALID_STATE", error instanceof Error ? error.message : "The game could not start");
+          throw new ServiceError(
+            "INVALID_STATE",
+            error instanceof Error ? error.message : "The game could not start",
+          );
         }
         return;
       case "game:next-round":
         this.requireHost(room, player);
         this.requireEnginePhase(room, player.id, "round-results");
-        room.engineState = this.applyEngineAction(room.engineState, player.id, action);
+        room.engineState = this.applyEngineAction(
+          room.engineState,
+          player.id,
+          action,
+        );
         return;
       case "game:rematch":
         this.requireHost(room, player);
         this.requireEnginePhase(room, player.id, "final");
         delete room.engineState;
-        for (const candidate of room.players.values()) candidate.ready = candidate.isBot;
+        for (const candidate of room.players.values())
+          candidate.ready = candidate.isBot;
         room.activity.push(this.activity("The room is ready for a rematch."));
         return;
       case "game:choose-orientation":
       case "game:show":
       case "game:scout":
       case "game:scout-and-show":
-        if (room.engineState === undefined) throw new ServiceError("INVALID_STATE", "The game has not started");
-        room.engineState = this.applyEngineAction(room.engineState, player.id, action);
+        if (room.engineState === undefined)
+          throw new ServiceError("INVALID_STATE", "The game has not started");
+        room.engineState = this.applyEngineAction(
+          room.engineState,
+          player.id,
+          action,
+        );
         this.recordGameAction(room, player, action);
         return;
       case "room:leave":
@@ -441,7 +589,9 @@ export class RoomService {
           player.connected = true;
           delete player.disconnectedAt;
           this.transferHostFromBot(room);
-          room.activity.push(this.activity(`${player.name} left; a bot took over.`));
+          room.activity.push(
+            this.activity(`${player.name} left; a bot took over.`),
+          );
           room.updatedAt = this.now();
           this.repository.save(room);
         }
@@ -453,12 +603,15 @@ export class RoomService {
     let transitions = 0;
     while (room.engineState !== undefined) {
       this.engine.assertState?.(room.engineState);
-      const viewer = room.players.get(room.hostId) ?? room.players.values().next().value;
+      const viewer =
+        room.players.get(room.hostId) ?? room.players.values().next().value;
       if (!viewer) return;
       const view = this.engine.getPlayerView(room.engineState, viewer.id);
       const botId =
         view.phase === "orientation"
-          ? view.pendingOrientationPlayerIds?.find((playerId) => room.players.get(playerId)?.isBot)
+          ? view.pendingOrientationPlayerIds?.find(
+              (playerId) => room.players.get(playerId)?.isBot,
+            )
           : view.activePlayerId;
       if (!botId) return;
       const bot = room.players.get(botId);
@@ -477,7 +630,10 @@ export class RoomService {
       const previous = room.engineState;
       const next = this.engine.applyAction(previous, bot.id, action);
       if (next === previous) {
-        throw new ServiceError("INTERNAL_ERROR", "Bot action did not advance authoritative state");
+        throw new ServiceError(
+          "INTERNAL_ERROR",
+          "Bot action did not advance authoritative state",
+        );
       }
       this.engine.assertState?.(next);
       room.engineState = next;
@@ -514,7 +670,11 @@ export class RoomService {
       const nextHost =
         [...room.players.values()].find((candidate) => !candidate.isBot)?.id ??
         room.players.keys().next().value;
-      if (nextHost === undefined) throw new ServiceError("INTERNAL_ERROR", "Room has no replacement host");
+      if (nextHost === undefined)
+        throw new ServiceError(
+          "INTERNAL_ERROR",
+          "Room has no replacement host",
+        );
       room.hostId = nextHost;
     }
     room.updatedAt = this.now();
@@ -523,7 +683,8 @@ export class RoomService {
   }
 
   private requireHost(room: Room, player: RoomPlayer): void {
-    if (room.hostId !== player.id) throw new ServiceError("FORBIDDEN", "Only the host can do that");
+    if (room.hostId !== player.id)
+      throw new ServiceError("FORBIDDEN", "Only the host can do that");
   }
 
   private recordGameAction(
@@ -541,7 +702,9 @@ export class RoomService {
     >,
   ): void {
     if (action.type === "game:choose-orientation") {
-      room.activity.push(this.activity(`${player.name} locked their hand orientation.`));
+      room.activity.push(
+        this.activity(`${player.name} locked their hand orientation.`),
+      );
       return;
     }
     const view =
@@ -557,12 +720,21 @@ export class RoomService {
       this.recordCompletionActivity(room, view?.phase);
       return;
     }
-    const values = view?.table.at(-1)?.cards.map((card) => card.top).join("–");
+    const values = view?.table
+      .at(-1)
+      ?.cards.map((card) =>
+        action.valueMode === "opposite" ? card.bottom : card.top,
+      )
+      .join("–");
+    const mode =
+      room.rulesMode === "vosu"
+        ? ` using ${action.valueMode.toUpperCase()} values`
+        : "";
     room.activity.push(
       this.activity(
         action.type === "game:scout-and-show"
-          ? `${player.name} scouted, then showed${values ? ` ${values}` : ""}.`
-          : `${player.name} showed${values ? ` ${values}` : ""}.`,
+          ? `${player.name} scouted, then showed${values ? ` ${values}` : ""}${mode}.`
+          : `${player.name} showed${values ? ` ${values}` : ""}${mode}.`,
         "good",
       ),
     );
@@ -582,25 +754,48 @@ export class RoomService {
 
   private transferHostFromBot(room: Room): void {
     if (!room.players.get(room.hostId)?.isBot) return;
-    const human = [...room.players.values()].find((candidate) => !candidate.isBot);
+    const human = [...room.players.values()].find(
+      (candidate) => !candidate.isBot,
+    );
     if (human) room.hostId = human.id;
   }
 
   private requireLobby(room: Room): void {
-    if (room.engineState !== undefined) throw new ServiceError("INVALID_STATE", "This action is only available in the lobby");
+    if (room.engineState !== undefined)
+      throw new ServiceError(
+        "INVALID_STATE",
+        "This action is only available in the lobby",
+      );
   }
 
-  private requireEnginePhase(room: Room, viewerId: string, phase: "round-results" | "final"): void {
-    if (room.engineState === undefined || this.engine.getPlayerView(room.engineState, viewerId).phase !== phase) {
-      throw new ServiceError("INVALID_STATE", `This action requires the ${phase} phase`);
+  private requireEnginePhase(
+    room: Room,
+    viewerId: string,
+    phase: "round-results" | "final",
+  ): void {
+    if (
+      room.engineState === undefined ||
+      this.engine.getPlayerView(room.engineState, viewerId).phase !== phase
+    ) {
+      throw new ServiceError(
+        "INVALID_STATE",
+        `This action requires the ${phase} phase`,
+      );
     }
   }
 
-  private applyEngineAction(state: unknown, playerId: string, action: Extract<ClientAction, { type: `game:${string}` }>): unknown {
+  private applyEngineAction(
+    state: unknown,
+    playerId: string,
+    action: Extract<ClientAction, { type: `game:${string}` }>,
+  ): unknown {
     try {
       return this.engine.applyAction(state, playerId, action);
     } catch (error: unknown) {
-      throw new ServiceError("INVALID_ACTION", error instanceof Error ? error.message : "The action is not legal");
+      throw new ServiceError(
+        "INVALID_ACTION",
+        error instanceof Error ? error.message : "The action is not legal",
+      );
     }
   }
 
@@ -624,13 +819,19 @@ export class RoomService {
   private newRoomCode(): string {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       let code = "";
-      for (let index = 0; index < 5; index += 1) code += ROOM_ALPHABET[randomInt(ROOM_ALPHABET.length)]!;
+      for (let index = 0; index < 5; index += 1)
+        code += ROOM_ALPHABET[randomInt(ROOM_ALPHABET.length)]!;
       if (!this.repository.get(code)) return code;
     }
     throw new ServiceError("INTERNAL_ERROR", "Unable to allocate a room code");
   }
 
-  private rememberAction(room: Room, actionId: string, playerId: string, fingerprint: string): void {
+  private rememberAction(
+    room: Room,
+    actionId: string,
+    playerId: string,
+    fingerprint: string,
+  ): void {
     room.processedActions.set(actionId, { playerId, fingerprint });
     while (room.processedActions.size > MAX_PROCESSED_ACTIONS) {
       const oldest = room.processedActions.keys().next().value;

@@ -1,4 +1,4 @@
-import type { Activity, ClientAction } from "@grandstand/shared";
+import type { Activity, ClientAction, RulesMode } from "@grandstand/shared";
 
 export interface RoomPlayer {
   readonly id: string;
@@ -19,6 +19,7 @@ export interface ProcessedAction {
 export interface Room {
   readonly code: string;
   hostId: string;
+  rulesMode: RulesMode;
   readonly players: Map<string, RoomPlayer>;
   engineState?: unknown;
   readonly processedActions: Map<string, ProcessedAction>;

@@ -1,14 +1,6 @@
-import {
-  cardValue,
-  flipWholeHand,
-  randomOrientation,
-} from "./cards.js";
+import { cardValue, flipWholeHand, randomOrientation } from "./cards.js";
 import type { RandomSource } from "./rng.js";
-import {
-  beatsShow,
-  classifyShow,
-  enumerateLegalShows,
-} from "./shows.js";
+import { beatsShow, classifyShow, enumerateLegalShows } from "./shows.js";
 import { assertRoundInvariants } from "./invariants.js";
 import {
   RulesError,
@@ -18,6 +10,7 @@ import {
   type OrientedCard,
   type PlayerId,
   type PlayerState,
+  type RulesMode,
   type RoundEndReason,
   type RoundState,
   type ScoutAction,
@@ -36,10 +29,7 @@ function playerAt(
   return player;
 }
 
-function replacePlayer(
-  state: RoundState,
-  player: PlayerState,
-): RoundState {
+function replacePlayer(state: RoundState, player: PlayerState): RoundState {
   return {
     ...state,
     players: { ...state.players, [player.id]: player },
@@ -82,13 +72,14 @@ function makePlayer(
   id: PlayerId,
   hand: readonly OrientedCard[],
   variant: RoundState["variant"],
+  rulesMode: RulesMode,
 ): PlayerState {
   return {
     id,
     hand,
     captured: [],
     scoutTokens: 0,
-    scoutAndShowAvailable: variant === "standard",
+    scoutAndShowAvailable: variant === "standard" || rulesMode === "vosu",
     twoPlayerScoutChips: variant === "two-player" ? 3 : 0,
     orientationChosen: false,
   };
@@ -100,6 +91,7 @@ export function createRoundFromDeck(
   rng: RandomSource,
   startingPlayerId: PlayerId = playerIds[0] ?? "",
   variant: RoundState["variant"] = "standard",
+  rulesMode: RulesMode = "official",
 ): RoundState {
   if (playerIds.length < 2 || playerIds.length > 5) {
     throw new RulesError("SCOUT requires two to five players");
@@ -113,8 +105,13 @@ export function createRoundFromDeck(
   if (deck.length % playerIds.length !== 0) {
     throw new RulesError("The round deck must deal evenly");
   }
-  if (variant === "two-player" && (playerIds.length !== 2 || deck.length !== 22)) {
-    throw new RulesError("The two-player variant requires two players and 22 cards");
+  if (
+    variant === "two-player" &&
+    (playerIds.length !== 2 || deck.length !== 22)
+  ) {
+    throw new RulesError(
+      "The two-player variant requires two players and 22 cards",
+    );
   }
   if (playerIds.length === 2 && variant !== "two-player") {
     throw new RulesError("Two-player rounds must use the two-player variant");
@@ -130,10 +127,11 @@ export function createRoundFromDeck(
     const cards = deck
       .slice(playerIndex * handSize, (playerIndex + 1) * handSize)
       .map((card) => randomOrientation(card, rng));
-    players[id] = makePlayer(id, cards, variant);
+    players[id] = makePlayer(id, cards, variant, rulesMode);
   }
 
   const round: RoundState = {
+    rulesMode,
     variant,
     playerOrder: [...playerIds],
     players,
@@ -153,6 +151,7 @@ export function createRoundFromHands(
   playerOrder: readonly PlayerId[],
   startingPlayerId: PlayerId,
   variant: RoundState["variant"] = "standard",
+  rulesMode: RulesMode = "official",
 ): RoundState {
   if (playerOrder.length < 2 || playerOrder.length > 5) {
     throw new RulesError("SCOUT requires two to five players");
@@ -176,10 +175,14 @@ export function createRoundFromHands(
     if (hand === undefined) {
       throw new RulesError(`Missing hand for ${id}`);
     }
-    players[id] = { ...makePlayer(id, [...hand], variant), orientationChosen: true };
+    players[id] = {
+      ...makePlayer(id, [...hand], variant, rulesMode),
+      orientationChosen: true,
+    };
     ids.push(...hand.map((oriented) => oriented.card.id));
   }
   const round: RoundState = {
+    rulesMode,
     variant,
     playerOrder: [...playerOrder],
     players,
@@ -271,7 +274,16 @@ function showCards(
   }
 
   const shown = player.hand.slice(action.start, action.end + 1);
-  const classification = classifyShow(shown);
+  const valueMode =
+    action.valueMode ??
+    (state.rulesMode === "official" ? ("active" as const) : undefined);
+  if (valueMode !== "active" && valueMode !== "opposite") {
+    throw new RulesError("Show value mode must be active or opposite");
+  }
+  if (state.rulesMode === "official" && valueMode !== "active") {
+    throw new RulesError("Official rules only allow active card values");
+  }
+  const classification = classifyShow(shown, valueMode);
   if (classification === null) {
     throw new RulesError("The selected cards are not a set or consecutive run");
   }
@@ -292,6 +304,7 @@ function showCards(
   const activeShow: ActiveShow = {
     ownerId: playerId,
     cards: shown,
+    valueMode,
     classification,
     scoutedBy: [],
   };
@@ -360,8 +373,13 @@ function scoutWithoutTurnAdvance(
     inserted,
     ...player.hand.slice(action.insertAt),
   ];
-  const remainingShowCards = show.cards.filter((_, index) => index !== cardIndex);
-  const remainingClassification = classifyShow(remainingShowCards);
+  const remainingShowCards = show.cards.filter(
+    (_, index) => index !== cardIndex,
+  );
+  const remainingClassification = classifyShow(
+    remainingShowCards,
+    show.valueMode,
+  );
   const updatedShow =
     remainingClassification === null
       ? null
@@ -376,6 +394,10 @@ function scoutWithoutTurnAdvance(
     hand,
     twoPlayerScoutChips:
       player.twoPlayerScoutChips - (spendTwoPlayerChip ? 1 : 0),
+    scoutAndShowAvailable:
+      state.rulesMode === "vosu" && state.variant === "two-player"
+        ? player.twoPlayerScoutChips - (spendTwoPlayerChip ? 1 : 0) > 0
+        : player.scoutAndShowAvailable,
   };
   let next = replacePlayer(state, scoutedPlayer);
   next = { ...next, activeShow: updatedShow };
@@ -404,6 +426,7 @@ function finishTwoPlayerIfStuck(state: RoundState): RoundState {
   const legalShows = enumerateLegalShows(
     player.hand,
     state.activeShow?.classification ?? null,
+    state.rulesMode,
   );
   if (player.twoPlayerScoutChips === 0 && legalShows.length === 0) {
     const winnerId = state.activeShow?.ownerId ?? nextPlayer(state, player.id);
@@ -455,26 +478,43 @@ function scoutAndShow(
   playerId: PlayerId,
   action: ScoutAndShowAction,
 ): RoundState {
-  if (state.variant === "two-player") {
+  if (state.variant === "two-player" && state.rulesMode === "official") {
     throw new RulesError("Scout & Show is not used in the two-player variant");
   }
   const player = requireTurn(state, playerId);
+  if (
+    state.rulesMode === "vosu" &&
+    state.variant === "two-player" &&
+    player.twoPlayerScoutChips <= 0
+  ) {
+    throw new RulesError("No two-player Scout chips remain");
+  }
   if (!player.scoutAndShowAvailable) {
     throw new RulesError("Scout & Show has already been used this round");
   }
 
   // All mutations are applied to fresh objects. If Show validation throws, the
   // caller's original state remains untouched.
-  const scouted = scoutWithoutTurnAdvance(state, playerId, action, false).state;
+  const spendTwoPlayerChip = state.variant === "two-player";
+  const scouted = scoutWithoutTurnAdvance(
+    state,
+    playerId,
+    action,
+    spendTwoPlayerChip,
+  ).state;
   const afterScoutPlayer = playerAt(scouted.players, playerId);
-  const consumed = replacePlayer(scouted, {
-    ...afterScoutPlayer,
-    scoutAndShowAvailable: false,
-  });
+  const consumed =
+    state.rulesMode === "official"
+      ? replacePlayer(scouted, {
+          ...afterScoutPlayer,
+          scoutAndShowAvailable: false,
+        })
+      : scouted;
   return showCards(consumed, playerId, {
     type: "show",
     start: action.showStart,
     end: action.showEnd,
+    valueMode: action.valueMode,
   });
 }
 
@@ -493,6 +533,8 @@ export function applyRoundAction(
   return next;
 }
 
-export function visibleValues(hand: readonly OrientedCard[]): readonly number[] {
+export function visibleValues(
+  hand: readonly OrientedCard[],
+): readonly number[] {
   return hand.map(cardValue);
 }

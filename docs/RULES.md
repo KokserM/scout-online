@@ -3,19 +3,40 @@
 GRANDSTAND implements the rules of SCOUT with original presentation. The engine is the
 normative source of truth; this document records the interpretation used by that engine.
 
+## Rules modes
+
+Every room, game, round, and player-facing state declares a rules mode. `official` is
+the default and follows the rules below. `vosu` is an optional house-rule variant named
+**Võsu**. It is not an official SCOUT ruleset and is not endorsed by or affiliated with
+Oink Games.
+
+Võsu changes exactly these rules:
+
+1. Each Show chooses one value mode, **ACTIVE** or **OPPOSITE**, for the complete
+   contiguous Show. The choice cannot vary per card. Validity, rank, and comparison all
+   use that one mode.
+2. In 3–5 player rounds, Scout & Show is not consumed and may be used repeatedly.
+3. In two-player rounds, Scout & Show is enabled. Like Scout, it costs the actor one
+   Scout chip and awards no Scout point; unlike Scout, its successful Show passes play
+   to the opponent.
+
+All setup, hand-orientation, Show-strength, capture, all-Scouted, round-count, and
+scoring rules are otherwise unchanged.
+
 ## Cards and visible values
 
 The deck has one immutable card for each unordered pair `(low, high)` where
 `1 <= low < high <= 10`, for 45 unique cards. Orientation selects which endpoint is
 active. In the interface, the large upright number labeled **ACTIVE** is the card's
-playable value. The small **OPPOSITE** number beneath it is only an opposite-side
-reference and cannot be selected as that card's value for a Show. A hand is an ordered
-array. Its order is fixed by the deal.
+normal playable value. The small **OPPOSITE** number beneath it is an opposite-side
+reference. Official play never selects it; Võsu may select it only as one uniform mode
+for an entire Show. A hand is an ordered array. Its order is fixed by the deal.
 
 Before play, each player either accepts the dealt hand or rotates the whole hand. A
 whole-hand rotation reverses card order and flips every card, matching a physical
-180-degree rotation. After locking, dealt cards cannot move or flip individually, and
-players cannot choose between a card's active and opposite values for each Show.
+180-degree rotation. After locking, dealt cards cannot move or flip individually.
+Official players always use active values. Võsu players choose once per Show, never
+independently per card.
 Scouting is the only exception: a newly Scouted card may choose either orientation only
 while it is inserted into any gap. That orientation is then locked with the rest of the
 hand.
@@ -35,9 +56,9 @@ each round, so every player starts once.
 
 ## Show
 
-A Show removes one contiguous interval from the acting hand, using each card's active
-value. The opposite-side reference is never an alternate value choice. One card is
-always legal.
+A Show removes one contiguous interval from the acting hand. Official uses each card's
+active value. Võsu uses either every active value or every opposite value, as declared
+by the action. One card is always legal in either Võsu mode.
 Two or more cards must be:
 
 - a **set**: all visible values equal; or
@@ -68,12 +89,15 @@ clockwise.
 
 ## Scout & Show (3–5 players)
 
-Once per round, each player may perform a Scout followed immediately by a Show in one
+In Official mode, once per round each player may perform a Scout followed immediately
+by a Show in one
 atomic, server-validated turn. The Show is evaluated against the reduced Active Set and
 need not include the scouted card. If the Scout clears the table, any valid Show is
 allowed. A successful combined action establishes a new Active Set owner and resets
 all-Scouted tracking; it cannot end the round based on Scouts against the replaced
-Show. The ability is consumed only by a successfully applied combined action.
+Show. The ability is consumed only by a successfully applied combined action. In Võsu,
+the same combined action is unlimited and the resulting Show may uniformly use ACTIVE
+or OPPOSITE values.
 
 ## Round end and scoring (3–5 players)
 
@@ -93,7 +117,9 @@ the highest cumulative score wins; ties are shared.
 
 ## Dedicated two-player game
 
-Two-player mode lasts two rounds and never enables Scout & Show.
+Two-player mode lasts two rounds. Official never enables Scout & Show. Võsu enables it
+at the same one-chip cost as Scout; it awards no Scout point and a successful combined
+Show passes the turn.
 All two-seat rounds, including rounds created through low-level engine factories, must
 use this dedicated variant; the standard 3–5-player rules are invalid with two seats.
 

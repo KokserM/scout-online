@@ -1,6 +1,8 @@
 export type PlayerId = string;
 export type CardId = string;
 export type PlayerCount = 2 | 3 | 4 | 5;
+export type RulesMode = "official" | "vosu";
+export type ShowValueMode = "active" | "opposite";
 
 export interface Card {
   readonly id: CardId;
@@ -34,6 +36,7 @@ export interface ShowClassification {
 export interface ActiveShow {
   readonly ownerId: PlayerId;
   readonly cards: readonly OrientedCard[];
+  readonly valueMode: ShowValueMode;
   readonly classification: ShowClassification;
   readonly scoutedBy: readonly PlayerId[];
 }
@@ -52,6 +55,7 @@ export type RoundStatus =
   | { readonly kind: "ended"; readonly result: RoundResult };
 
 export interface RoundState {
+  readonly rulesMode: RulesMode;
   readonly variant: "standard" | "two-player";
   readonly playerOrder: readonly PlayerId[];
   readonly players: Readonly<Record<PlayerId, PlayerState>>;
@@ -72,6 +76,7 @@ export type GameStatus =
     };
 
 export interface GameState {
+  readonly rulesMode: RulesMode;
   readonly playerOrder: readonly PlayerId[];
   readonly playerCount: PlayerCount;
   readonly initialStartingPlayerId: PlayerId;
@@ -88,6 +93,7 @@ export interface ShowAction {
   readonly type: "show";
   readonly start: number;
   readonly end: number;
+  readonly valueMode: ShowValueMode;
 }
 
 export interface ScoutAction {
@@ -104,6 +110,7 @@ export interface ScoutAndShowAction {
   readonly flipped: boolean;
   readonly showStart: number;
   readonly showEnd: number;
+  readonly valueMode: ShowValueMode;
 }
 
 export type GameAction = ShowAction | ScoutAction | ScoutAndShowAction;
@@ -122,6 +129,7 @@ export type ActionDisabledReason =
 
 export interface ShowRangeOption {
   readonly action: ShowAction;
+  readonly valueMode: ShowValueMode;
   readonly classification: ShowClassification;
   readonly legal: boolean;
 }
@@ -154,6 +162,7 @@ export interface PublicPlayerView {
 }
 
 export interface PublicRoundView {
+  readonly rulesMode: RulesMode;
   readonly variant: RoundState["variant"];
   readonly playerOrder: readonly PlayerId[];
   readonly players: readonly PublicPlayerView[];

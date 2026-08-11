@@ -8,6 +8,7 @@ import type {
   GameState,
   PlayerCount,
   PlayerId,
+  RulesMode,
   RoundState,
 } from "./types.js";
 import { RulesError } from "./types.js";
@@ -47,6 +48,7 @@ function buildRound(
   roundNumber: number,
   rng: RandomSource,
   twoPlayerRoundDecks: readonly (readonly Card[])[],
+  rulesMode: RulesMode,
 ): RoundState {
   const startingPlayer = startingPlayerForRound(
     playerOrder,
@@ -64,6 +66,7 @@ function buildRound(
       rng,
       startingPlayer,
       "two-player",
+      rulesMode,
     );
   }
   return createRoundFromDeck(
@@ -72,6 +75,7 @@ function buildRound(
     rng,
     startingPlayer,
     "standard",
+    rulesMode,
   );
 }
 
@@ -79,6 +83,7 @@ export function createGame(
   playerIds: readonly PlayerId[],
   rng: RandomSource,
   initialStartingPlayerId: PlayerId = playerIds[0] ?? "",
+  rulesMode: RulesMode = "official",
 ): GameState {
   const playerCount = asPlayerCount(playerIds.length);
   if (new Set(playerIds).size !== playerIds.length) {
@@ -96,6 +101,7 @@ export function createGame(
       : [];
 
   const game: GameState = {
+    rulesMode,
     playerOrder,
     playerCount,
     initialStartingPlayerId,
@@ -108,6 +114,7 @@ export function createGame(
       1,
       rng,
       twoPlayerRoundDecks,
+      rulesMode,
     ),
     totals: emptyTotals(playerOrder),
     status: { kind: "active" },
@@ -194,6 +201,7 @@ export function startNextRound(
       roundNumber,
       rng,
       game.twoPlayerRoundDecks,
+      game.rulesMode,
     ),
     scoredCurrentRound: false,
   };

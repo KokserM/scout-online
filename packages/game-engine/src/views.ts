@@ -23,6 +23,7 @@ export function toPublicRoundView(state: RoundState): PublicRoundView {
     };
   });
   return {
+    rulesMode: state.rulesMode,
     variant: state.variant,
     playerOrder: [...state.playerOrder],
     players,

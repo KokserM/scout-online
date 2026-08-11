@@ -17,7 +17,10 @@ export interface ClientProtocol {
   connect(token?: string): void;
   disconnect(): void;
   dispatch(action: ClientAction): void;
-  on<K extends keyof ProtocolEvents>(event: K, listener: ProtocolEvents[K]): () => void;
+  on<K extends keyof ProtocolEvents>(
+    event: K,
+    listener: ProtocolEvents[K],
+  ): () => void;
 }
 
 /**
@@ -28,7 +31,10 @@ export class SocketProtocol implements ClientProtocol {
   private socket: Socket | undefined;
   private inFlightActionId: string | undefined;
   private readonly outbox: WireAction[] = [];
-  private readonly listeners = new Map<keyof ProtocolEvents, Set<(payload: unknown) => void>>();
+  private readonly listeners = new Map<
+    keyof ProtocolEvents,
+    Set<(payload: unknown) => void>
+  >();
 
   connect(token?: string) {
     if (this.socket) return;
@@ -63,7 +69,8 @@ export class SocketProtocol implements ClientProtocol {
       else {
         this.emit("error", {
           code: "BAD_SERVER_STATE",
-          message: "The server sent an invalid game state. Reconnect before continuing.",
+          message:
+            "The server sent an invalid game state. Reconnect before continuing.",
         });
       }
     });
@@ -78,7 +85,8 @@ export class SocketProtocol implements ClientProtocol {
           if (this.socket) this.socket.auth = {};
         }
         if (error.data.code === "RATE_LIMITED" && error.data.actionId) {
-          if (this.inFlightActionId === error.data.actionId) this.inFlightActionId = undefined;
+          if (this.inFlightActionId === error.data.actionId)
+            this.inFlightActionId = undefined;
           window.setTimeout(() => this.flush(), 1_000);
         } else if (error.data.actionId) {
           this.removeFromOutbox(error.data.actionId);
@@ -118,7 +126,8 @@ export class SocketProtocol implements ClientProtocol {
     if (this.outbox.length >= 64) {
       this.emit("error", {
         code: "RATE_LIMITED",
-        message: "Too many actions are waiting to send. Reconnect and try again.",
+        message:
+          "Too many actions are waiting to send. Reconnect and try again.",
       });
       return;
     }
@@ -133,7 +142,10 @@ export class SocketProtocol implements ClientProtocol {
     return () => bucket.delete(listener as (payload: unknown) => void);
   }
 
-  private emit<K extends keyof ProtocolEvents>(event: K, ...args: Parameters<ProtocolEvents[K]>) {
+  private emit<K extends keyof ProtocolEvents>(
+    event: K,
+    ...args: Parameters<ProtocolEvents[K]>
+  ) {
     this.listeners.get(event)?.forEach((listener) => listener(args[0]));
   }
 
@@ -145,7 +157,9 @@ export class SocketProtocol implements ClientProtocol {
   }
 
   private removeFromOutbox(actionId: string): void {
-    const index = this.outbox.findIndex((action) => action.actionId === actionId);
+    const index = this.outbox.findIndex(
+      (action) => action.actionId === actionId,
+    );
     if (index >= 0) this.outbox.splice(index, 1);
     if (this.inFlightActionId === actionId) this.inFlightActionId = undefined;
   }
@@ -157,7 +171,12 @@ function toWireAction(action: ClientAction): WireAction {
     case "create-room":
       return { actionId, type: "room:create", name: action.name };
     case "join-room":
-      return { actionId, type: "room:join", name: action.name, roomCode: action.roomCode };
+      return {
+        actionId,
+        type: "room:join",
+        name: action.name,
+        roomCode: action.roomCode,
+      };
     case "quick-play":
       return { actionId, type: "room:quick-play", name: action.name };
     case "set-ready":
@@ -170,6 +189,12 @@ function toWireAction(action: ClientAction): WireAction {
       };
     case "remove-bot":
       return { actionId, type: "host:remove-bot", playerId: action.playerId };
+    case "set-rules-mode":
+      return {
+        actionId,
+        type: "host:set-rules-mode",
+        rulesMode: action.rulesMode,
+      };
     case "start-game":
       return { actionId, type: "game:start" };
     case "next-round":
@@ -177,9 +202,18 @@ function toWireAction(action: ClientAction): WireAction {
     case "rematch":
       return { actionId, type: "game:rematch" };
     case "choose-orientation":
-      return { actionId, type: "game:choose-orientation", flipped: action.flipped };
+      return {
+        actionId,
+        type: "game:choose-orientation",
+        flipped: action.flipped,
+      };
     case "show":
-      return { actionId, type: "game:show", cardIds: action.cardIds };
+      return {
+        actionId,
+        type: "game:show",
+        cardIds: action.cardIds,
+        valueMode: action.valueMode,
+      };
     case "scout":
       return {
         actionId,
@@ -198,6 +232,7 @@ function toWireAction(action: ClientAction): WireAction {
         insertAt: action.insertionIndex,
         flipped: action.flipped,
         cardIds: action.cardIds,
+        valueMode: action.valueMode,
       };
     case "leave-room":
       return { actionId, type: "room:leave" };

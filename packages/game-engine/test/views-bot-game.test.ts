@@ -37,7 +37,9 @@ describe("sanitized views", () => {
     expect(hiddenId).toBeDefined();
     const publicView = toPublicRoundView(round);
     expect(JSON.stringify(publicView)).not.toContain(hiddenId);
-    expect(publicView.players.find((player) => player.id === "bob")?.handCount).toBe(2);
+    expect(
+      publicView.players.find((player) => player.id === "bob")?.handCount,
+    ).toBe(2);
 
     const privateView = toPrivatePlayerView(round, "alice");
     expect(privateView.hand).toEqual(round.players.alice?.hand);
@@ -77,7 +79,12 @@ describe("information-limited bot", () => {
       toPrivatePlayerView(round, "a"),
       new SeededRandomSource(1),
     );
-    expect(action).toEqual({ type: "show", start: 0, end: 2 });
+    expect(action).toEqual({
+      type: "show",
+      start: 0,
+      end: 2,
+      valueMode: "active",
+    });
     expect(() => applyRoundAction(round, "a", action)).not.toThrow();
   });
 
@@ -98,6 +105,59 @@ describe("information-limited bot", () => {
         new SeededRandomSource(9),
       ).type,
     ).toBe("scout");
+  });
+
+  it("chooses a legal opposite-value VOSU Show from its private view", () => {
+    let round = createRoundFromHands(
+      {
+        a: [testCard(8, 10), testCard(2, 7)],
+        b: [testCard(1, 9), testCard(3, 6)],
+        c: [testCard(4, 5)],
+      },
+      ["a", "b", "c"],
+      "a",
+      "standard",
+      "vosu",
+    );
+    round = applyRoundAction(round, "a", {
+      type: "show",
+      start: 0,
+      end: 0,
+      valueMode: "active",
+    });
+    const action = chooseBotAction(
+      toPrivatePlayerView(round, "b"),
+      new SeededRandomSource(4),
+    );
+    expect(action).toMatchObject({ type: "show", valueMode: "opposite" });
+    expect(() => applyRoundAction(round, "b", action)).not.toThrow();
+  });
+
+  it("uses repeatable VOSU Scout & Show options without hidden state", () => {
+    let round = createRoundFromHands(
+      {
+        a: [testCard(4, 8), testCard(4, 9), testCard(7, 10)],
+        b: [testCard(3, 7), testCard(5, 10)],
+        c: [testCard(6, 9)],
+      },
+      ["a", "b", "c"],
+      "a",
+      "standard",
+      "vosu",
+    );
+    round = applyRoundAction(round, "a", {
+      type: "show",
+      start: 0,
+      end: 1,
+      valueMode: "active",
+    });
+    const action = chooseBotAction(
+      toPrivatePlayerView(round, "b"),
+      new SeededRandomSource(7),
+    );
+    expect(action.type).toBe("scout-and-show");
+    round = applyRoundAction(round, "b", action);
+    expect(round.players.b?.scoutAndShowAvailable).toBe(true);
   });
 
   it("keeps Easy bot choices legal while allowing less efficient Scouts", () => {
@@ -160,7 +220,9 @@ describe("game setup", () => {
 
   it("splits one shuffled 44-card deck across the two two-player rounds", () => {
     const game = createGame(["a", "b"], new SeededRandomSource(123));
-    expect(game.twoPlayerRoundDecks.map((deck) => deck.length)).toEqual([22, 22]);
+    expect(game.twoPlayerRoundDecks.map((deck) => deck.length)).toEqual([
+      22, 22,
+    ]);
     const ids = game.twoPlayerRoundDecks.flat().map((card) => card.id);
     expect(new Set(ids).size).toBe(44);
     expect(ids).not.toContain("9-10");

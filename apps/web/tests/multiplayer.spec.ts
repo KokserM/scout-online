@@ -21,8 +21,8 @@ test("two browsers can Show and complete a repeat-turn Scout", async ({
 
   await expect(host.getByRole("button", { name: "Ready", exact: true })).toBeVisible();
   await guest.getByRole("button", { name: "I’m ready" }).click();
-  await expect(host.getByRole("button", { name: /Start the match/i })).toBeEnabled();
-  await host.getByRole("button", { name: /Start the match/i }).click();
+  await expect(host.getByRole("button", { name: /Start .*match/i })).toBeEnabled();
+  await host.getByRole("button", { name: /Start .*match/i }).click();
 
   await expect(host.getByRole("heading", { name: /Which way is up/i })).toBeVisible();
   await expect(guest.getByRole("heading", { name: /Which way is up/i })).toBeVisible();
@@ -39,8 +39,12 @@ test("two browsers can Show and complete a repeat-turn Scout", async ({
   await expect(openingPlayer.locator(".hand-scroll")).toBeVisible();
   await openingPlayer.locator(".hand .card-button").first().click();
   await openingPlayer.getByRole("button", { name: /^Show 1$/ }).click();
-  await expect(host.getByText(/showed$/i)).toBeVisible();
-  await expect(guest.getByText(/showed$/i)).toBeVisible();
+  await expect(
+    host.locator(".table-caption").getByText(/showed · ACTIVE/i),
+  ).toBeVisible();
+  await expect(
+    guest.locator(".table-caption").getByText(/showed · ACTIVE/i),
+  ).toBeVisible();
 
   const scoutingPlayer = await waitForActivePage(pages);
   await scoutingPlayer.getByRole("button", { name: "Scout (3)" }).click();
@@ -68,6 +72,93 @@ test("two browsers can Show and complete a repeat-turn Scout", async ({
 
   await hostContext.close();
   await guestContext.close();
+});
+
+test("Võsu 2p and 3p rooms dispatch opposite Shows on desktop and mobile", async ({
+  browser,
+}, testInfo) => {
+  test.setTimeout(180_000);
+
+  for (const playerCount of [2, 3] as const) {
+    await test.step(`${playerCount} players`, async () => {
+      const contexts = await Promise.all(
+        Array.from({ length: playerCount }, () =>
+          gameContext(browser, testInfo.project.name),
+        ),
+      );
+      try {
+        const pages = await Promise.all(
+          contexts.map((context) => context.newPage()),
+        );
+        const host = pages[0]!;
+        await host.goto("/");
+        await host
+          .getByLabel("Your display name", { exact: true })
+          .fill(`Võsu Host ${playerCount}`);
+        await host.getByRole("button", { name: /Create room/i }).click();
+        await host.getByRole("radio", { name: "Võsu" }).click();
+        await expect(host.getByRole("radio", { name: "Võsu" })).toBeChecked();
+        const roomCode = (
+          await host.locator(".room-code span").allTextContents()
+        ).join("");
+
+        for (let index = 1; index < pages.length; index += 1) {
+          const guest = pages[index]!;
+          await guest.goto(`/?room=${roomCode}`);
+          await guest
+            .getByLabel("Display name", { exact: true })
+            .fill(`Võsu Guest ${index}`);
+          await guest.getByRole("button", { name: /Take my seat/i }).click();
+          await expect(guest.getByText("Playing mode")).toBeVisible();
+          await expect(guest.getByText("Võsu", { exact: true })).toBeVisible();
+          await expect(
+            guest.getByText(/Only the host can change this/i),
+          ).toBeVisible();
+          await guest
+            .getByRole("button", { name: "I’m ready", exact: true })
+            .click();
+        }
+
+        await expect(
+          host.getByRole("button", { name: /Start .*match/i }),
+        ).toBeEnabled();
+        await host.getByRole("button", { name: /Start .*match/i }).click();
+        await Promise.all(
+          pages.map(async (page) => {
+            await expect(
+              page.getByRole("heading", { name: /Which way is up/i }),
+            ).toBeVisible();
+            await page
+              .getByRole("button", { name: /Lock this orientation/i })
+              .click();
+            await expect(
+              page.getByRole("heading", { name: /Which way is up/i }),
+            ).toBeHidden();
+          }),
+        );
+
+        const actor = await waitForActivePage(pages);
+        await actor.locator(".hand .card-button").first().click();
+        const picker = actor.getByRole("group", {
+          name: "Choose values for this Show",
+        });
+        await expect(picker).toBeVisible();
+        await picker.getByRole("radio", { name: "OPPOSITE" }).check();
+        await actor.getByRole("button", { name: /^Show 1$/ }).click();
+
+        await Promise.all(
+          pages.map(async (page) => {
+            await expect(page.getByText(/showed · OPPOSITE/i)).toBeVisible();
+            await expect(
+              page.locator(".current-play .is-effective-opposite"),
+            ).toHaveCount(1);
+          }),
+        );
+      } finally {
+        await Promise.all(contexts.map((context) => context.close()));
+      }
+    });
+  }
 });
 
 test("Scout & Show selection preserves a right-scrolled preview", async ({
@@ -117,8 +208,8 @@ test("Scout & Show selection preserves a right-scrolled preview", async ({
           await expect(page.getByRole("heading", { name: /Gather your players/i })).toBeVisible();
           await page.getByRole("button", { name: "I’m ready", exact: true }).click();
         }
-        await expect(host.getByRole("button", { name: /Start the match/i })).toBeEnabled();
-        await host.getByRole("button", { name: /Start the match/i }).click();
+        await expect(host.getByRole("button", { name: /Start .*match/i })).toBeEnabled();
+        await host.getByRole("button", { name: /Start .*match/i }).click();
 
         const pages = [host, guestOne, guestTwo];
         await Promise.all(
@@ -138,7 +229,11 @@ test("Scout & Show selection preserves a right-scrolled preview", async ({
         await openingCards.nth(weakestIndex).click();
         await openingPlayer.getByRole("button", { name: /^Show 1$/ }).click();
         await Promise.all(
-          pages.map((page) => expect(page.getByText(/showed$/i)).toBeVisible()),
+          pages.map((page) =>
+            expect(
+              page.locator(".table-caption").getByText(/showed · ACTIVE/i),
+            ).toBeVisible(),
+          ),
         );
 
         const combinedPlayer = await waitForActivePage(pages);
@@ -196,7 +291,11 @@ test("Scout & Show selection preserves a right-scrolled preview", async ({
         if (viewport.complete) {
           await confirm.click();
           await expect(combinedPlayer.getByRole("heading", { name: "Choose your Show." })).toBeHidden();
-          await expect(combinedPlayer.getByText(/showed$/i)).toBeVisible();
+          await expect(
+            combinedPlayer
+              .locator(".table-caption")
+              .getByText(/showed · ACTIVE/i),
+          ).toBeVisible();
         } else {
           await combinedPlayer.getByRole("button", { name: "Cancel", exact: true }).click();
           await expect(combinedPlayer.getByRole("heading", { name: "Choose your Show." })).toBeHidden();
@@ -237,8 +336,8 @@ test("a live round reaches responsive results", async ({ browser }, testInfo) =>
   await guest.getByLabel("Display name", { exact: true }).fill("Results Guest");
   await guest.getByRole("button", { name: /Take my seat/i }).click();
   await guest.getByRole("button", { name: "I’m ready" }).click();
-  await expect(host.getByRole("button", { name: /Start the match/i })).toBeEnabled();
-  await host.getByRole("button", { name: /Start the match/i }).click();
+  await expect(host.getByRole("button", { name: /Start .*match/i })).toBeEnabled();
+  await host.getByRole("button", { name: /Start .*match/i }).click();
   await Promise.all([host, guest].map(async (page) => {
     await page.getByRole("button", { name: /Lock this orientation/i }).click();
     await expect(page.getByRole("heading", { name: /Which way is up/i })).toBeHidden();

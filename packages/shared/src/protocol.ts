@@ -1,32 +1,64 @@
 import { z } from "zod";
 
 const boundedText = (min: number, max: number) =>
-  z.string().trim().min(min).max(max).refine((value) => !/[\u0000-\u001f\u007f]/u.test(value), {
-    message: "Control characters are not allowed",
-  });
+  z
+    .string()
+    .trim()
+    .min(min)
+    .max(max)
+    .refine((value) => !/[\u0000-\u001f\u007f]/u.test(value), {
+      message: "Control characters are not allowed",
+    });
 
 export const roomCodeSchema = z
   .string()
   .trim()
   .toUpperCase()
   .regex(/^[A-HJ-NP-Z2-9]{5}$/, "Invalid room code");
-export const sessionTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{32,128}$/u, "Invalid session token");
+export const sessionTokenSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{32,128}$/u, "Invalid session token");
 export const playerNameSchema = boundedText(1, 24);
 export const actionIdSchema = z.string().uuid();
 export const entityIdSchema = z.string().uuid();
 export const cardIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/u);
 export const playIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,96}$/u);
+export const rulesModeSchema = z.enum(["official", "vosu"]);
+export const showValueModeSchema = z.enum(["active", "opposite"]);
 
 const actionBase = { actionId: actionIdSchema };
 const playerId = entityIdSchema;
 
 export const clientActionSchema = z.discriminatedUnion("type", [
-  z.object({ ...actionBase, type: z.literal("room:create"), name: playerNameSchema }).strict(),
-  z.object({ ...actionBase, type: z.literal("room:quick-play"), name: playerNameSchema }).strict(),
   z
-    .object({ ...actionBase, type: z.literal("room:join"), roomCode: roomCodeSchema, name: playerNameSchema })
+    .object({
+      ...actionBase,
+      type: z.literal("room:create"),
+      name: playerNameSchema,
+    })
     .strict(),
-  z.object({ ...actionBase, type: z.literal("player:set-ready"), ready: z.boolean() }).strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("room:quick-play"),
+      name: playerNameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("room:join"),
+      roomCode: roomCodeSchema,
+      name: playerNameSchema,
+    })
+    .strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("player:set-ready"),
+      ready: z.boolean(),
+    })
+    .strict(),
   z
     .object({
       ...actionBase,
@@ -35,14 +67,30 @@ export const clientActionSchema = z.discriminatedUnion("type", [
       difficulty: z.enum(["easy", "standard"]).default("standard"),
     })
     .strict(),
-  z.object({ ...actionBase, type: z.literal("host:remove-bot"), playerId }).strict(),
+  z
+    .object({ ...actionBase, type: z.literal("host:remove-bot"), playerId })
+    .strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("host:set-rules-mode"),
+      rulesMode: rulesModeSchema,
+    })
+    .strict(),
   z.object({ ...actionBase, type: z.literal("game:start") }).strict(),
-  z.object({ ...actionBase, type: z.literal("game:choose-orientation"), flipped: z.boolean() }).strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("game:choose-orientation"),
+      flipped: z.boolean(),
+    })
+    .strict(),
   z
     .object({
       ...actionBase,
       type: z.literal("game:show"),
-      cardIds: z.array(cardIdSchema).min(1).max(10),
+      cardIds: z.array(cardIdSchema).min(1).max(13),
+      valueMode: showValueModeSchema,
     })
     .strict(),
   z
@@ -63,7 +111,8 @@ export const clientActionSchema = z.discriminatedUnion("type", [
       position: z.enum(["start", "end"]),
       insertAt: z.number().int().nonnegative().max(20).optional(),
       flipped: z.boolean().optional(),
-      cardIds: z.array(cardIdSchema).min(1).max(10),
+      cardIds: z.array(cardIdSchema).min(1).max(13),
+      valueMode: showValueModeSchema,
     })
     .strict(),
   z.object({ ...actionBase, type: z.literal("game:next-round") }).strict(),
@@ -103,7 +152,12 @@ export const publicPlayerSchema = z
   .strict();
 
 export const playSchema = z
-  .object({ id: playIdSchema, playerId: entityIdSchema, cards: z.array(cardSchema) })
+  .object({
+    id: playIdSchema,
+    playerId: entityIdSchema,
+    cards: z.array(cardSchema),
+    valueMode: showValueModeSchema,
+  })
   .strict();
 
 export const activitySchema = z
@@ -149,6 +203,7 @@ export const showRangeHintSchema = z
   .object({
     cardIds: z.array(cardIdSchema).min(1).max(13),
     kind: z.enum(["single", "run", "set"]),
+    valueMode: showValueModeSchema,
     legal: z.boolean(),
   })
   .strict();
@@ -158,7 +213,7 @@ export const availableActionsSchema = z
     show: z
       .object({
         ...availabilityBase,
-        ranges: z.array(showRangeHintSchema).max(210),
+        ranges: z.array(showRangeHintSchema).max(182),
       })
       .strict(),
     scout: z
@@ -181,9 +236,7 @@ export const availableActionsSchema = z
                 position: z.enum(["start", "end"]),
                 insertAt: z.number().int().nonnegative().max(20),
                 flipped: z.boolean(),
-                showRanges: z
-                  .array(showRangeHintSchema)
-                  .max(231),
+                showRanges: z.array(showRangeHintSchema).max(210),
               })
               .strict(),
           )
@@ -196,7 +249,13 @@ export const availableActionsSchema = z
 export const playerStateSchema = z
   .object({
     roomCode: roomCodeSchema,
-    phase: z.enum(["lobby", "orientation", "playing", "round-results", "final"]),
+    phase: z.enum([
+      "lobby",
+      "orientation",
+      "playing",
+      "round-results",
+      "final",
+    ]),
     selfId: entityIdSchema,
     hostId: entityIdSchema,
     players: z.array(publicPlayerSchema),
@@ -207,6 +266,7 @@ export const playerStateSchema = z
     scoutTargetId: entityIdSchema.optional(),
     round: z.number().int().positive(),
     totalRounds: z.number().int().min(2).max(5),
+    rulesMode: rulesModeSchema,
     variant: z.enum(["standard", "two-player"]),
     mustChooseOrientation: z.boolean(),
     availableActions: availableActionsSchema,
@@ -225,6 +285,8 @@ export type RoundScore = z.infer<typeof roundScoreSchema>;
 export type ActionDisabledReason = z.infer<typeof actionDisabledReasonSchema>;
 export type ShowRangeHint = z.infer<typeof showRangeHintSchema>;
 export type AvailableActions = z.infer<typeof availableActionsSchema>;
+export type RulesMode = z.infer<typeof rulesModeSchema>;
+export type ShowValueMode = z.infer<typeof showValueModeSchema>;
 export type PlayerState = z.infer<typeof playerStateSchema>;
 
 export const protocolErrorCodeSchema = z.enum([

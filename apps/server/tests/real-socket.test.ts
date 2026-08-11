@@ -7,9 +7,13 @@ import type {
   ClientToServerEvents,
   PlayerState,
   ProtocolError,
+  RulesMode,
   ServerToClientEvents,
 } from "@grandstand/shared";
-import { io as createClient, type Socket as ClientSocket } from "socket.io-client";
+import {
+  io as createClient,
+  type Socket as ClientSocket,
+} from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { createServerApp, type ServerApp } from "../src/app.js";
 import { createGameEngine } from "../src/game-engine-adapter.js";
@@ -44,25 +48,47 @@ describe("real Socket.IO transport with the real game engine", () => {
     for (const viewer of table.seats) {
       const serialized = JSON.stringify(viewer.state);
       const projectedStrings = collectStrings(viewer.state);
-      expect(serialized).not.toMatch(/sessionToken|twoPlayerRoundDecks|initialCardIds/u);
+      expect(serialized).not.toMatch(
+        /sessionToken|twoPlayerRoundDecks|initialCardIds/u,
+      );
       for (const opponent of table.seats) {
         if (opponent === viewer) continue;
-        for (const card of opponent.state!.hand) expect(projectedStrings).not.toContain(card.id);
+        for (const card of opponent.state!.hand)
+          expect(projectedStrings).not.toContain(card.id);
       }
     }
 
     const actor = seatForActive(table);
-    const show = legalShows(actor).sort((left, right) => right.cardIds.length - left.cardIds.length)[0]!;
+    const show = legalShows(actor).sort(
+      (left, right) => right.cardIds.length - left.cardIds.length,
+    )[0]!;
     expect(show.cardIds.length).toBeGreaterThan(1);
+    const stateBeforeForgedMode = structuredClone(actor.state);
+    await expect(
+      send(actor, {
+        actionId: randomUUID(),
+        type: "game:show",
+        cardIds: show.cardIds,
+        valueMode: "opposite",
+      }),
+    ).rejects.toThrow(/Official rules only allow active/i);
+    expect(actor.state).toEqual(stateBeforeForgedMode);
+
     await send(actor, {
       actionId: randomUUID(),
       type: "game:show",
       cardIds: show.cardIds,
+      valueMode: show.valueMode,
     });
     await waitForAll(
       table,
       (state) => state.table[0]?.cards.length === show.cardIds.length,
     );
+    expect(
+      table.seats.every(
+        (seat) => seat.state!.table[0]?.valueMode === show.valueMode,
+      ),
+    ).toBe(true);
 
     const scout = seatForActive(table);
     const scoutCardId = scout.state!.table[0]!.cards[0]!.id;
@@ -83,13 +109,14 @@ describe("real Socket.IO transport with the real game engine", () => {
 
     const combinedActor = seatForActive(table);
     expect(
-      combinedActor.state!.availableActions.scoutAndShow.options.every((candidate) =>
-        candidate.showRanges.some((range) => range.legal),
+      combinedActor.state!.availableActions.scoutAndShow.options.every(
+        (candidate) => candidate.showRanges.some((range) => range.legal),
       ),
     ).toBe(true);
-    const option = combinedActor.state!.availableActions.scoutAndShow.options.find((candidate) =>
-      candidate.showRanges.some((range) => range.legal),
-    );
+    const option =
+      combinedActor.state!.availableActions.scoutAndShow.options.find(
+        (candidate) => candidate.showRanges.some((range) => range.legal),
+      );
     expect(option).toBeDefined();
     const combinedShow = option!.showRanges.find((range) => range.legal)!;
     const stateBeforeForgedCombined = structuredClone(combinedActor.state);
@@ -102,6 +129,7 @@ describe("real Socket.IO transport with the real game engine", () => {
         insertAt: option!.insertAt,
         flipped: option!.flipped,
         cardIds: ["forged-card"],
+        valueMode: combinedShow.valueMode,
       }),
     ).rejects.toThrow(/selected card is not in the hand/i);
     expect(combinedActor.state).toEqual(stateBeforeForgedCombined);
@@ -114,14 +142,16 @@ describe("real Socket.IO transport with the real game engine", () => {
       insertAt: option!.insertAt,
       flipped: option!.flipped,
       cardIds: combinedShow.cardIds,
+      valueMode: combinedShow.valueMode,
     });
     await waitForAll(
       table,
       (state) => state.table[0]?.playerId === combinedActor.state!.selfId,
     );
     expect(
-      combinedActor.state!.players.find((player) => player.id === combinedActor.state!.selfId)
-        ?.scoutAndShowAvailable,
+      combinedActor.state!.players.find(
+        (player) => player.id === combinedActor.state!.selfId,
+      )?.scoutAndShowAvailable,
     ).toBe(false);
   });
 
@@ -137,6 +167,7 @@ describe("real Socket.IO transport with the real game engine", () => {
       actionId: randomUUID(),
       type: "game:show",
       cardIds: opening.cardIds,
+      valueMode: opening.valueMode,
     });
     await waitForAll(
       table,
@@ -158,7 +189,8 @@ describe("real Socket.IO transport with the real game engine", () => {
         table,
         (state) =>
           state.activePlayerId === scoutId &&
-          state.players.find((player) => player.id === scoutId)?.scoutChips === chips,
+          state.players.find((player) => player.id === scoutId)?.scoutChips ===
+            chips,
       );
     }
 
@@ -173,9 +205,47 @@ describe("real Socket.IO transport with the real game engine", () => {
 
     await send(host, { actionId: randomUUID(), type: "game:rematch" });
     await waitForState(host, (state) => state.phase === "lobby");
-    expect(host.state!.players.every((player) => player.ready === false)).toBe(true);
-    expect(host.state!.players.every((player) => player.score === 0)).toBe(true);
+    expect(host.state!.players.every((player) => player.ready === false)).toBe(
+      true,
+    );
+    expect(host.state!.players.every((player) => player.score === 0)).toBe(
+      true,
+    );
   }, 30_000);
+
+  it("restores the public VOSU table mode without leaking private state", async () => {
+    const table = await startTable(2, 23, "vosu");
+    const actor = seatForActive(table);
+    const observer = table.seats.find((seat) => seat !== actor)!;
+    const opposite = legalShows(actor).find(
+      (range) => range.valueMode === "opposite" && range.cardIds.length === 1,
+    )!;
+    await send(actor, {
+      actionId: randomUUID(),
+      type: "game:show",
+      cardIds: opposite.cardIds,
+      valueMode: opposite.valueMode,
+    });
+    await waitForState(
+      observer,
+      (state) => state.table[0]?.valueMode === "opposite",
+    );
+    expect(observer.state!.activity.at(-1)?.message).toMatch(
+      /using OPPOSITE values/u,
+    );
+    const privateHand = observer.state!.hand;
+
+    observer.socket.disconnect();
+    const resumed = await connectSeat(table, observer.token);
+    await waitForState(
+      resumed,
+      (state) => state.table[0]?.valueMode === "opposite",
+    );
+    expect(resumed.state!.hand).toEqual(privateHand);
+    expect(collectStrings(resumed.state)).not.toContain(
+      actor.state!.hand[0]!.id,
+    );
+  });
 
   it("restores a disconnected seat, replaces duplicate sessions, and deduplicates actions", async () => {
     const table = await startTable(2, 31);
@@ -187,7 +257,8 @@ describe("real Socket.IO transport with the real game engine", () => {
     await waitForState(
       other,
       (state) =>
-        state.players.find((player) => player.id === original.state!.selfId)?.connected === false,
+        state.players.find((player) => player.id === original.state!.selfId)
+          ?.connected === false,
     );
 
     const resumed = await connectSeat(table, original.token);
@@ -196,7 +267,8 @@ describe("real Socket.IO transport with the real game engine", () => {
     await waitForState(
       other,
       (state) =>
-        state.players.find((player) => player.id === original.state!.selfId)?.connected === true,
+        state.players.find((player) => player.id === original.state!.selfId)
+          ?.connected === true,
     );
 
     const replaced = once<void>(resumed.socket, "session:replaced");
@@ -211,6 +283,7 @@ describe("real Socket.IO transport with the real game engine", () => {
       actionId,
       type: "game:show",
       cardIds: legalShows(duplicateSession)[0]!.cardIds,
+      valueMode: legalShows(duplicateSession)[0]!.valueMode,
     };
     expect((await send(duplicateSession, action)).duplicate).toBe(false);
     await waitForState(
@@ -233,19 +306,27 @@ describe("real Socket.IO transport with the real game engine", () => {
       guest,
       (state) =>
         state.hostId === guest.state!.selfId &&
-        state.players.some((player) => player.id === host.state!.selfId && player.isBot),
+        state.players.some(
+          (player) => player.id === host.state!.selfId && player.isBot,
+        ),
     );
     expect(guest.state!.hostId).toBe(guest.state!.selfId);
     expect(
-      guest.state!.players.find((player) => player.id === host.state!.selfId)?.isBot,
+      guest.state!.players.find((player) => player.id === host.state!.selfId)
+        ?.isBot,
     ).toBe(true);
     expect(
-      guest.state!.phase !== "playing" || guest.state!.activePlayerId === guest.state!.selfId,
+      guest.state!.phase !== "playing" ||
+        guest.state!.activePlayerId === guest.state!.selfId,
     ).toBe(true);
   });
 });
 
-async function startTable(playerCount: 2 | 3, seed: number): Promise<Table> {
+async function startTable(
+  playerCount: 2 | 3,
+  seed: number,
+  rulesMode: RulesMode = "official",
+): Promise<Table> {
   const server = createServerApp({
     engine: createGameEngine({
       rng: new SeededRandomSource(seed),
@@ -254,16 +335,30 @@ async function startTable(playerCount: 2 | 3, seed: number): Promise<Table> {
     nodeEnv: "test",
     reconnectGraceMs: 2_000,
   });
-  await new Promise<void>((resolve) => server.httpServer.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) =>
+    server.httpServer.listen(0, "127.0.0.1", resolve),
+  );
   const table: Table = { server, seats: [] };
   openTables.push(table);
 
   const host = await connectSeat(table);
   const hostToken = once<string>(host.socket, "session:token");
-  await send(host, { actionId: randomUUID(), type: "room:create", name: "Host" });
+  await send(host, {
+    actionId: randomUUID(),
+    type: "room:create",
+    name: "Host",
+  });
   host.token = await hostToken;
   await waitForState(host, (state) => state.phase === "lobby");
   const roomCode = host.state!.roomCode;
+  if (rulesMode !== "official") {
+    await send(host, {
+      actionId: randomUUID(),
+      type: "host:set-rules-mode",
+      rulesMode,
+    });
+    await waitForState(host, (state) => state.rulesMode === rulesMode);
+  }
 
   for (let index = 1; index < playerCount; index += 1) {
     const seat = await connectSeat(table);
@@ -299,7 +394,11 @@ async function orientAll(table: Table): Promise<void> {
       });
     }),
   );
-  await Promise.all(table.seats.map((seat) => waitForState(seat, (state) => state.phase === "playing")));
+  await Promise.all(
+    table.seats.map((seat) =>
+      waitForState(seat, (state) => state.phase === "playing"),
+    ),
+  );
 }
 
 async function playToResults(table: Table): Promise<void> {
@@ -315,6 +414,7 @@ async function playToResults(table: Table): Promise<void> {
         actionId: randomUUID(),
         type: "game:show",
         cardIds: show.cardIds,
+        valueMode: show.valueMode,
       });
     } else {
       expect(actor.state!.availableActions.scout.enabled).toBe(true);
@@ -339,12 +439,16 @@ async function playToResults(table: Table): Promise<void> {
 }
 
 function legalShows(seat: Seat) {
-  return seat.state!.availableActions.show.ranges.filter((range) => range.legal);
+  return seat.state!.availableActions.show.ranges.filter(
+    (range) => range.legal,
+  );
 }
 
 function seatForActive(table: Table): Seat {
   const activeId = table.seats[0]!.state!.activePlayerId;
-  const seat = table.seats.find((candidate) => candidate.state?.selfId === activeId);
+  const seat = table.seats.find(
+    (candidate) => candidate.state?.selfId === activeId,
+  );
   if (!seat) throw new Error(`No connected seat for active player ${activeId}`);
   return seat;
 }
@@ -362,7 +466,10 @@ async function connectSeat(table: Table, token?: string): Promise<Seat> {
   });
   table.seats.push(seat);
   await new Promise<void>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timed out connecting socket")), 5_000);
+    const timeout = setTimeout(
+      () => reject(new Error("Timed out connecting socket")),
+      5_000,
+    );
     socket.once("connect", () => {
       clearTimeout(timeout);
       resolve();
@@ -373,7 +480,10 @@ async function connectSeat(table: Table, token?: string): Promise<Seat> {
 
 function send(seat: Seat, action: ClientAction): Promise<ActionAck> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${action.type}`)), 5_000);
+    const timeout = setTimeout(
+      () => reject(new Error(`Timed out waiting for ${action.type}`)),
+      5_000,
+    );
     const onAck = (ack: ActionAck) => {
       if (ack.actionId !== action.actionId) return;
       cleanup();
@@ -426,9 +536,15 @@ function waitForAll(
   );
 }
 
-function once<T>(socket: GameClient, event: keyof ServerToClientEvents): Promise<T> {
+function once<T>(
+  socket: GameClient,
+  event: keyof ServerToClientEvents,
+): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for ${event}`)), 5_000);
+    const timeout = setTimeout(
+      () => reject(new Error(`Timed out waiting for ${event}`)),
+      5_000,
+    );
     socket.once(event, ((value?: T) => {
       clearTimeout(timeout);
       resolve(value as T);

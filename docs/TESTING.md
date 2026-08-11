@@ -20,7 +20,10 @@ npx pnpm@10.15.0 install
 
 - Engine unit tests cover deck uniqueness/filtering, Show classification and ranking,
   orientation locking, insertion, Scout, Scout & Show, round ending, scoring, rotation,
-  and the dedicated two-player rules.
+  and the dedicated two-player rules. Focused Võsu regressions cover active/opposite
+  sets, runs, and singles; uniform-mode construction; Official rejection; repeatable
+  combined actions; two-player chip/turn behavior; all-Scouted scoring; bots; public
+  views; and invariants.
 - Targeted rules-audit regressions exercise the complete Show strength ladder through
   authoritative actions; Scout tracking resets; partial, table-clearing, and
   scouted-card-excluding Scout & Show paths; own-Show Scout rejection; four- and
@@ -35,13 +38,17 @@ npx pnpm@10.15.0 install
   Scout & Show, repeated two-player Scout turns/chips, disconnect and reconnect,
   duplicate-session replacement, duplicate action IDs, leave-on-turn bot takeover,
   host transfer, both round transitions, final results, rematch, malformed payloads,
-  turn authorization, forged cards, and recipient-specific projections.
+  turn authorization, forged cards/value modes, host-only lobby mode selection,
+  post-start locking, Võsu rematch retention, and recipient-specific projections.
 - Browser tests cover landing, create/join/ready/start, orientation, Quick Play, a real
   two-browser Show and repeat-turn Scout workflow, plus a three-browser Scout & Show
   regression that verifies right-scrolled range selection at 320×568, 390×844,
   430×932, 667×375, and 1440×900. General responsive checks also cover 375×667,
   768×1024, and 1280×720. They use overflow, scroll-position, geometry, visibility,
-  and reachability checks rather than brittle golden screenshots.
+  and reachability checks rather than brittle golden screenshots. Real 2- and 3-player
+  Võsu rooms run in both desktop and iPhone projects, asserting host/guest lobby state,
+  opposite-mode dispatch, and the highlighted public table mode. QR invites and crowded
+  mobile hands are exercised across the same acceptance viewport set.
   Deterministic result details and commands are component-tested; complete
   round/final/rematch behavior is verified at the real Socket.IO layer.
 
@@ -58,7 +65,7 @@ pnpm test:simulation
 
 This audit was performed against the rule implementation, protocol projections, and
 the automated evidence named below. “Verified” means covered by deterministic tests or
-the 4,000-game invariant run; it is not a mathematical proof of every possible game.
+the 8,000-game invariant run; it is not a mathematical proof of every possible game.
 
 1. **Deck identity and filtering — verified.** The 45 unordered pairs are unique, and
    3/4/5-player filtering matches the documented deck sizes (`cards-and-rng.test.ts`).
@@ -101,7 +108,8 @@ the 4,000-game invariant run; it is not a mathematical proof of every possible g
     (`round.test.ts`, `real-socket.test.ts`).
 17. **State and card conservation — verified.** Valid actors, variants, Show
     classifications, card zones, totals, and all card IDs are asserted after
-    transitions and across 4,000 completed games (`invariants.ts`,
+    transitions and across 8,000 completed games: 4,000 Official and 4,000 Võsu
+    (`invariants.ts`,
     `simulation.test.ts`).
 18. **Authority and session lifecycle — verified at loopback integration scope.**
     Out-of-turn/forged actions fail; projections exclude opponent hands and tokens;
@@ -112,7 +120,7 @@ the 4,000-game invariant run; it is not a mathematical proof of every possible g
 ## CI and verification scope
 
 `.github/workflows/qa.yml` gates pushes and pull requests on install, workspace
-typecheck, all unit/integration tests, the explicit 4,000-game simulation command,
+typecheck, all unit/integration tests, the explicit 8,000-game simulation command,
 production builds, and Chromium Playwright tests.
 
 The suite does not establish internet-scale reliability, multi-process consistency,
@@ -132,16 +140,18 @@ npx --yes pnpm@10.15.0 test:e2e
 ```
 
 - Typecheck: 4 workspace projects passed.
-- Unit/integration: 19 files, 105 tests passed. This total includes the two simulation
+- Unit/integration: 22 files, 135 tests passed. This total includes the two simulation
   tests because the engine's normal test command discovers them.
 - Explicit simulation gate: 1 file, 2 tests passed; the stress case completed exactly
-  4,000 games (1,000 seeds at each of 2, 3, 4, and 5 players).
-- Build: 4 workspace projects passed; Vite transformed 2,120 modules and emitted the
+  8,000 games (1,000 seeds for both Official and Võsu at each of 2, 3, 4, and 5
+  players).
+- Build: 4 workspace projects passed; Vite transformed 2,122 modules and emitted the
   production HTML, CSS, and JavaScript assets.
-- Playwright: 20 project/test combinations discovered, 14 passed, and 6 were
+- Playwright: 22 project/test combinations discovered, 16 passed, and 6 were
   intentionally skipped by project guards. The responsive and Scout & Show regressions
   execute their acceptance viewport matrices inside desktop-project cases; the mobile
-  project uses Chromium with iPhone touch and viewport emulation.
+  project uses Chromium with iPhone touch and viewport emulation. The successful full
+  run used four workers to avoid overloading the shared local development servers.
 
 A local production start with `NODE_ENV=production` and `PORT=4179` also returned 200
 from `/health`, `/`, a deep extensionless SPA route, the built JavaScript asset, and the

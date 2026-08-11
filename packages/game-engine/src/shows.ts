@@ -1,18 +1,31 @@
-import { cardValue } from "./cards.js";
 import type {
   OrientedCard,
   ShowAction,
   ShowClassification,
   ShowKind,
+  ShowValueMode,
 } from "./types.js";
+
+export function resolveShowValue(
+  card: OrientedCard,
+  valueMode: ShowValueMode,
+): number {
+  const active = card.flipped ? card.card.high : card.card.low;
+  return valueMode === "active"
+    ? active
+    : card.flipped
+      ? card.card.low
+      : card.card.high;
+}
 
 export function classifyShow(
   cards: readonly OrientedCard[],
+  valueMode: ShowValueMode = "active",
 ): ShowClassification | null {
   if (cards.length === 0) {
     return null;
   }
-  const values = cards.map(cardValue);
+  const values = cards.map((card) => resolveShowValue(card, valueMode));
   const first = values[0];
   if (first === undefined) {
     return null;
@@ -76,16 +89,21 @@ export function beatsShow(
 export function enumerateLegalShows(
   hand: readonly OrientedCard[],
   incumbent: ShowClassification | null,
+  rulesMode: "official" | "vosu" = "official",
 ): readonly ShowAction[] {
   const actions: ShowAction[] = [];
+  const valueModes: readonly ShowValueMode[] =
+    rulesMode === "vosu" ? ["active", "opposite"] : ["active"];
   for (let start = 0; start < hand.length; start += 1) {
     for (let end = start; end < hand.length; end += 1) {
-      const classification = classifyShow(hand.slice(start, end + 1));
-      if (
-        classification !== null &&
-        beatsShow(classification, incumbent)
-      ) {
-        actions.push({ type: "show", start, end });
+      for (const valueMode of valueModes) {
+        const classification = classifyShow(
+          hand.slice(start, end + 1),
+          valueMode,
+        );
+        if (classification !== null && beatsShow(classification, incumbent)) {
+          actions.push({ type: "show", start, end, valueMode });
+        }
       }
     }
   }

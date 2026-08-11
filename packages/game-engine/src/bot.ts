@@ -24,7 +24,11 @@ function value(oriented: OrientedCard): number {
   return oriented.flipped ? oriented.card.high : oriented.card.low;
 }
 
-function adjacencyScore(hand: readonly OrientedCard[], insertAt: number, card: OrientedCard): number {
+function adjacencyScore(
+  hand: readonly OrientedCard[],
+  insertAt: number,
+  card: OrientedCard,
+): number {
   const candidate = value(card);
   let score = 0;
   for (const neighbor of [hand[insertAt - 1], hand[insertAt]]) {
@@ -37,9 +41,16 @@ function adjacencyScore(hand: readonly OrientedCard[], insertAt: number, card: O
   return score;
 }
 
-function bestByScore<T>(values: readonly T[], score: (value: T) => number, rng: RandomSource): T {
+function bestByScore<T>(
+  values: readonly T[],
+  score: (value: T) => number,
+  rng: RandomSource,
+): T {
   const highest = Math.max(...values.map(score));
-  return randomItem(values.filter((value) => score(value) === highest), rng);
+  return randomItem(
+    values.filter((value) => score(value) === highest),
+    rng,
+  );
 }
 
 function scoutAndShowOptions(
@@ -50,11 +61,12 @@ function scoutAndShowOptions(
     return [];
   }
   const actions: ScoutAndShowAction[] = [];
-  for (const scout of enumerateScoutActions(view.hand.length, show.cards.length)) {
+  for (const scout of enumerateScoutActions(
+    view.hand.length,
+    show.cards.length,
+  )) {
     const selected =
-      scout.side === "left"
-        ? show.cards[0]
-        : show.cards[show.cards.length - 1];
+      scout.side === "left" ? show.cards[0] : show.cards[show.cards.length - 1];
     if (selected === undefined) {
       continue;
     }
@@ -68,11 +80,9 @@ function scoutAndShowOptions(
       ...view.hand.slice(scout.insertAt),
     ];
     const remaining =
-      scout.side === "left"
-        ? show.cards.slice(1)
-        : show.cards.slice(0, -1);
-    const incumbent = classifyShow(remaining);
-    for (const shown of enumerateLegalShows(hand, incumbent)) {
+      scout.side === "left" ? show.cards.slice(1) : show.cards.slice(0, -1);
+    const incumbent = classifyShow(remaining, show.valueMode);
+    for (const shown of enumerateLegalShows(hand, incumbent, view.rulesMode)) {
       actions.push({
         type: "scout-and-show",
         side: scout.side,
@@ -80,6 +90,7 @@ function scoutAndShowOptions(
         flipped: scout.flipped,
         showStart: shown.start,
         showEnd: shown.end,
+        valueMode: shown.valueMode,
       });
     }
   }
@@ -104,6 +115,7 @@ export function chooseBotAction(
   const legalShows = enumerateLegalShows(
     view.hand,
     view.activeShow?.classification ?? null,
+    view.rulesMode,
   );
   const self = view.players.find((player) => player.id === view.viewerId);
   if (self === undefined) {
@@ -115,11 +127,9 @@ export function chooseBotAction(
   if (difficulty === "easy") {
     const canScout =
       view.activeShow !== null &&
+      view.activeShow.ownerId !== view.viewerId &&
       (view.variant === "standard" || self.twoPlayerScoutChips > 0);
-    if (
-      legalShows.length > 0 &&
-      (!canScout || randomInt(rng, 100) < 70)
-    ) {
+    if (legalShows.length > 0 && (!canScout || randomInt(rng, 100) < 70)) {
       return randomItem(legalShows, rng);
     }
     if (canScout && view.activeShow !== null) {
@@ -150,26 +160,42 @@ export function chooseBotAction(
     throw new RulesError("No legal action exists");
   }
 
-  if (view.variant === "standard" && self.scoutAndShowAvailable) {
-    const combined = scoutAndShowOptions(view);
+  const canScoutAndShow =
+    self.scoutAndShowAvailable &&
+    view.activeShow.ownerId !== view.viewerId &&
+    (view.variant === "standard" ||
+      (view.rulesMode === "vosu" && self.twoPlayerScoutChips > 0));
+  if (canScoutAndShow) {
+    // An unlimited VOSU Scout & Show that only replaces the scouted card can
+    // cycle forever. Prefer a plain Scout unless the combined action reduces
+    // the hand; two-player chips and official once-per-round use are bounded.
+    const combined = scoutAndShowOptions(view).filter(
+      (action) =>
+        view.rulesMode === "official" ||
+        view.variant === "two-player" ||
+        action.showEnd - action.showStart + 1 > 1,
+    );
     if (combined.length > 0) {
       return bestByScore(
         combined,
         (action) =>
           (action.showEnd - action.showStart + 1) * 20 +
           (view.activeShow?.cards.length ?? 0) * 3 -
-          (action.showStart <= action.insertAt && action.insertAt <= action.showEnd ? 0 : 2),
+          (action.showStart <= action.insertAt &&
+          action.insertAt <= action.showEnd
+            ? 0
+            : 2),
         rng,
       );
     }
   }
-  if (
-    view.variant === "two-player" &&
-    self.twoPlayerScoutChips <= 0
-  ) {
+  if (view.variant === "two-player" && self.twoPlayerScoutChips <= 0) {
     throw new RulesError("No legal action exists");
   }
-  const scouts = enumerateScoutActions(view.hand.length, view.activeShow.cards.length);
+  const scouts = enumerateScoutActions(
+    view.hand.length,
+    view.activeShow.cards.length,
+  );
   return bestByScore(
     scouts,
     (action) => {
@@ -180,8 +206,12 @@ export function chooseBotAction(
       if (!selected) return Number.NEGATIVE_INFINITY;
       const inserted = { card: selected.card, flipped: action.flipped };
       const conservation =
-        view.variant === "two-player" && self.twoPlayerScoutChips === 1 ? -6 : 0;
-      return adjacencyScore(view.hand, action.insertAt, inserted) + conservation;
+        view.variant === "two-player" && self.twoPlayerScoutChips === 1
+          ? -6
+          : 0;
+      return (
+        adjacencyScore(view.hand, action.insertAt, inserted) + conservation
+      );
     },
     rng,
   );

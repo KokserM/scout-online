@@ -29,6 +29,13 @@ browser intent
 The engine state machine uses explicit lobby/setup/play/result phases. Transport code
 does not directly mutate hands, scores, turns, or cards.
 
+Each room starts in Official mode. A lobby-only, host-authorized command may select the
+non-official Võsu variant; that value is copied into game and round state, projected to
+every recipient, locked after start, and retained through rematch. Show actions carry
+one uniform `valueMode`. The engine, rather than the browser hint, classifies every card
+in the range under that mode and rejects opposite mode in Official games. This type
+shape makes mixed per-card values unrepresentable.
+
 ## Information boundaries
 
 The room repository stores authoritative state. Before every broadcast, the server
@@ -40,7 +47,9 @@ Bots receive the same kind of view: public state plus their own private hand. Th
 chosen intents pass through the same validation and engine transition as human intents.
 Standard bots rank legal Shows, captures, Scout insertion adjacency, Scout & Show
 follow-ups, and two-player chip cost. Easy bots deliberately retain randomized,
-fallible choices. Neither policy accepts authoritative opponent hands or deck order.
+fallible choices. Both policies consume mode-specific legal-action projections, so
+Võsu opposite Shows and repeatable combined actions use no hidden authority. Neither
+policy accepts authoritative opponent hands or deck order.
 
 ## Room lifecycle
 
@@ -94,3 +103,6 @@ Every redeploy, restart, crash, or container replacement discards active rooms.
 Reverse-proxy TLS, process supervision, firewalling, and origin configuration are
 deployment responsibilities rather than guarantees supplied by this repository.
 See [Railway deployment](DEPLOYMENT.md) for the concrete configuration and checks.
+
+Võsu is an application house-rule variant, not an official SCOUT mode and not an Oink
+Games product or endorsement.

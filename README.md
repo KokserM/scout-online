@@ -7,6 +7,12 @@ GRANDSTAND supports 2–5 players, mixed human/bot rooms, reconnecting sessions,
 official dedicated two-player variant, mobile and desktop play, and complete multi-round
 scoring. It does not use or reproduce Oink Games artwork, logos, fonts, or trade dress.
 
+New rooms default to **Official** rules. A host may instead select **Võsu** in the
+lobby: every Show chooses either the active values or the opposite values uniformly,
+Scout & Show is repeatable in 3–5 player rounds, and two-player Scout & Show is enabled
+at a cost of one Scout chip. Võsu is a house-rule variant, not an official SCOUT ruleset
+or an Oink Games product.
+
 ## Requirements
 
 - Node.js 22 or newer
@@ -65,6 +71,9 @@ projection contains another player's hidden cards.
 The full implemented interpretation is in [docs/RULES.md](docs/RULES.md). In normal
 3–5 player games, the number of rounds equals the player count. Two-player games use the
 official two-packet deal, Scout chips, repeat-turn scouting, and two-round scoring.
+Official is the room default. The optional, non-official Võsu mode changes only Show
+value selection and Scout & Show availability/cost; setup, strength comparison, round
+ending, and scoring formulas remain the same.
 
 Production shuffling uses unbiased Fisher–Yates with a Web Crypto
 `getRandomValues` source and rejection sampling. Initial-seat selection uses Node

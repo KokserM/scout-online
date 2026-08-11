@@ -30,17 +30,26 @@ describe("legal action selectors", () => {
 
     const selected = selectLegalActions(round, "b");
     expect(selected.show.ranges).toContainEqual({
-      action: { type: "show", start: 0, end: 2 },
+      action: { type: "show", start: 0, end: 2, valueMode: "active" },
+      valueMode: "active",
       classification: { kind: "run", size: 3, rank: 3 },
       legal: true,
     });
     expect(selected.show.ranges).toContainEqual({
-      action: { type: "show", start: 0, end: 0 },
+      action: { type: "show", start: 0, end: 0, valueMode: "active" },
+      valueMode: "active",
       classification: { kind: "single", size: 1, rank: 1 },
       legal: false,
     });
     expect(selected.show.ranges).not.toContainEqual(
-      expect.objectContaining({ action: { type: "show", start: 2, end: 3 } }),
+      expect.objectContaining({
+        action: {
+          type: "show",
+          start: 2,
+          end: 3,
+          valueMode: "active",
+        },
+      }),
     );
   });
 
@@ -59,15 +68,15 @@ describe("legal action selectors", () => {
     const selected = selectLegalActions(round, "b");
     expect(selected.scout.disabledReason).toBeUndefined();
     expect(selected.scout.actions).toHaveLength(12);
-    expect(new Set(selected.scout.actions.map((action) => action.side))).toEqual(
-      new Set(["left", "right"]),
-    );
-    expect(new Set(selected.scout.actions.map((action) => action.insertAt))).toEqual(
-      new Set([0, 1, 2]),
-    );
-    expect(new Set(selected.scout.actions.map((action) => action.flipped))).toEqual(
-      new Set([false, true]),
-    );
+    expect(
+      new Set(selected.scout.actions.map((action) => action.side)),
+    ).toEqual(new Set(["left", "right"]));
+    expect(
+      new Set(selected.scout.actions.map((action) => action.insertAt)),
+    ).toEqual(new Set([0, 1, 2]));
+    expect(
+      new Set(selected.scout.actions.map((action) => action.flipped)),
+    ).toEqual(new Set([false, true]));
     expect(selected.scoutAndShow.actions.length).toBeGreaterThan(0);
     expect(
       selected.scoutAndShow.options.some((option) =>
@@ -92,12 +101,14 @@ describe("legal action selectors", () => {
     expect(combined.disabledReason).toBeUndefined();
     expect(combined.actions.length).toBeGreaterThan(0);
     expect(combined.options.length).toBeGreaterThan(0);
-    expect(combined.options.every((option) => option.ranges.some((range) => range.legal))).toBe(
-      true,
-    );
-    expect(new Set(combined.options.map((option) => option.scout.flipped))).toEqual(
-      new Set([true]),
-    );
+    expect(
+      combined.options.every((option) =>
+        option.ranges.some((range) => range.legal),
+      ),
+    ).toBe(true);
+    expect(
+      new Set(combined.options.map((option) => option.scout.flipped)),
+    ).toEqual(new Set([true]));
   });
 
   it("reports own-show and two-player chip prohibitions", () => {

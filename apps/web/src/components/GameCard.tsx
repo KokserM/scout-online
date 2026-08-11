@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { CSSProperties, KeyboardEventHandler, PointerEventHandler } from "react";
-import type { Card } from "../protocol/types";
+import type { Card, ShowValueMode } from "../protocol/types";
 
 export type CardPlayability = "neutral" | "legal" | "illegal" | "scoutable";
 
@@ -12,6 +12,8 @@ interface GameCardProps {
   compact?: boolean;
   layoutAnimation?: boolean;
   playability?: CardPlayability;
+  effectiveValueMode?: ShowValueMode;
+  playedOpposite?: boolean;
   onClick?: () => void;
   tabIndex?: number;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
@@ -58,6 +60,8 @@ export function GameCard({
   compact,
   layoutAnimation = true,
   playability = "neutral",
+  effectiveValueMode,
+  playedOpposite,
   onClick,
   tabIndex,
   onKeyDown,
@@ -81,11 +85,20 @@ export function GameCard({
   } as CSSProperties;
   const stateLabel =
     playability === "neutral" ? "" : `, ${playability}`;
-  const valueLabel = `active ${activeTop}, opposite ${activeBottom}`;
+  const effectiveValue =
+    effectiveValueMode === "opposite" ? activeBottom : activeTop;
+  const effectiveLabel = effectiveValueMode
+    ? `, effective Show value ${effectiveValue} from ${effectiveValueMode}`
+    : "";
+  const playedLabel = playedOpposite ? ", played opposite" : "";
+  const valueLabel = `active ${activeTop}, opposite ${activeBottom}${effectiveLabel}${playedLabel}`;
+  const effectiveClass = effectiveValueMode
+    ? `is-effective-${effectiveValueMode}`
+    : "";
 
   const content = (
     <div
-      className={`game-card game-card--motif-${design.motif}`}
+      className={`game-card game-card--motif-${design.motif} ${effectiveClass}`}
       aria-hidden="true"
       data-motif={design.motif}
       data-palette={design.palette}
@@ -102,6 +115,11 @@ export function GameCard({
           <small className="card-value card-value--opposite">{activeBottom}</small>
         </span>
       </span>
+      {playedOpposite && (
+        <span className="card-effective-badge" aria-hidden="true">
+          Played opposite
+        </span>
+      )}
       {playability !== "neutral" && (
         <span className="card-state" aria-hidden="true">
           {playability === "legal" ? "✓ LEGAL" : playability === "illegal" ? "× BLOCKED" : "↗ SCOUT"}
