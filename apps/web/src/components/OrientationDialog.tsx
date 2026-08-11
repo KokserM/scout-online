@@ -20,7 +20,7 @@ export function OrientationDialog({ state, previewFlipped, onFlip, onLock }: Ori
         <>
           <p className="eyebrow">ONE CHOICE. NO REORDERING.</p>
           <h1 id="orientation-title">Which way is up?</h1>
-          <p>Preview your complete hand, then lock it for the round.</p>
+          <p>Rotate only the complete hand, then lock it for the round. After locking, each card’s large upright number is its active value for Show; the small OPPOSITE number beneath it is a reference, not another choice.</p>
           <p className="orientation-progress" aria-live="polite">{readyCount} of {state.players.length} players locked</p>
           <motion.div
             className={`orientation-hand ${previewFlipped ? "is-reversed" : ""}`}
@@ -36,6 +36,7 @@ export function OrientationDialog({ state, previewFlipped, onFlip, onLock }: Ori
         <>
           <p className="eyebrow">YOUR HAND IS LOCKED</p>
           <h1 id="orientation-title">Waiting in the wings.</h1>
+          <p>Your large upright values are locked. Only a newly Scouted card may choose an orientation while you insert it.</p>
           <p aria-live="polite">{readyCount} of {state.players.length} players locked. Play begins automatically when everyone is ready.</p>
           {state.startingPlayerId && (
             <p className="starting-player"><Crown aria-hidden="true" /> {state.players.find((player) => player.id === state.startingPlayerId)?.name} starts this round</p>

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { demoGame } from "../protocol/demo";
 import { GameScreen } from "./GameScreen";
@@ -28,18 +28,42 @@ describe("GameScreen action hints", () => {
     };
     render(<GameScreen state={state} connected dispatch={dispatch} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "3 over 8" }));
-    fireEvent.click(screen.getAllByRole("button", { name: "4 over 7" })[0]!);
-    fireEvent.click(screen.getAllByRole("button", { name: "4 over 7" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "active 3, opposite 8" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "active 4, opposite 7" })[0]!);
+    fireEvent.click(screen.getAllByRole("button", { name: "active 4, opposite 7" })[0]!);
 
     const show = screen.getByRole("button", { name: "Show 3" });
     expect(show).toBeEnabled();
     expect(screen.getByText("run · legal Show")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("3 cards selected");
+    expect(screen.getByRole("status")).toHaveTextContent("run · legal Show");
     fireEvent.click(show);
     expect(dispatch).toHaveBeenCalledWith({
       type: "show",
       cardIds: ["c1", "c2", "c3"],
     });
+  });
+
+  it("reports projected too-weak and invalid selections with their counts", () => {
+    const state = {
+      ...demoGame,
+      availableActions: {
+        ...demoGame.availableActions,
+        show: {
+          enabled: true,
+          ranges: [{ cardIds: ["c1"], kind: "single" as const, legal: false }],
+        },
+      },
+    };
+    render(<GameScreen state={state} connected dispatch={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "active 3, opposite 8" }));
+    expect(screen.getByRole("status")).toHaveTextContent("1 card selected");
+    expect(screen.getByRole("status")).toHaveTextContent("Valid pattern, but too weak");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "active 4, opposite 7" })[0]!);
+    expect(screen.getByRole("status")).toHaveTextContent("2 cards selected");
+    expect(screen.getByRole("status")).toHaveTextContent("Not a valid Show pattern");
   });
 
   it("exposes every insertion gap once and confirms Scout before dispatch", () => {
@@ -50,6 +74,7 @@ describe("GameScreen action hints", () => {
     fireEvent.click(screen.getByRole("button", { name: "Take left" }));
     fireEvent.click(screen.getByRole("button", { name: "Use value 5" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose a gap" }));
+    expect(screen.getByLabelText("Scouted card to insert").querySelector(".card-inserted-marker")).toHaveTextContent("SCOUTED");
 
     const gaps = screen.getAllByRole("button", { name: /Insert at position/ });
     expect(gaps).toHaveLength(demoGame.hand.length + 1);
@@ -58,7 +83,10 @@ describe("GameScreen action hints", () => {
     fireEvent.click(screen.getByRole("button", { name: "Insert at position 3" }));
     expect(dispatch).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Confirm Scout" })).toBeEnabled();
-    expect(screen.getByLabelText("Resulting hand preview").children).toHaveLength(demoGame.hand.length + 1);
+    const resultPreview = screen.getByLabelText("Resulting hand preview");
+    expect(resultPreview.children).toHaveLength(demoGame.hand.length + 1);
+    expect(resultPreview.querySelectorAll(".is-inserted")).toHaveLength(1);
+    expect(screen.getByText(/card marked SCOUTED/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm Scout" }));
     expect(dispatch).toHaveBeenCalledWith({
@@ -79,11 +107,49 @@ describe("GameScreen action hints", () => {
     fireEvent.click(screen.getByRole("button", { name: "Use value 8" }));
     fireEvent.click(screen.getByRole("button", { name: "Choose a gap" }));
     fireEvent.click(screen.getByRole("button", { name: /Back/ }));
-    expect(screen.getByRole("heading", { name: "Which way is up?" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Set the Scouted card’s orientation." })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Which way is up?" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Set the Scouted card’s orientation." })).not.toBeInTheDocument());
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("preserves prior choices on Back and clears transient Show state", async () => {
+    const state = {
+      ...demoGame,
+      availableActions: {
+        ...demoGame.availableActions,
+        scoutAndShow: {
+          enabled: true,
+          playId: "p1",
+          options: Array.from({ length: demoGame.hand.length + 1 }, (_, insertAt) => ({
+            position: "start" as const,
+            insertAt,
+            flipped: false,
+            showRanges: [{ cardIds: ["t1"], kind: "single" as const, legal: true }],
+          })),
+        },
+      },
+    };
+    render(<GameScreen state={state} connected dispatch={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Scout & Show" }));
+    fireEvent.click(screen.getByRole("button", { name: "Take left" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use value 5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose a gap" }));
+    fireEvent.click(screen.getByRole("button", { name: "Insert at position 2" }));
+    fireEvent.click(screen.getByRole("button", { name: /active 5, opposite 6, Scouted card/i }));
+    expect(within(screen.getByRole("dialog")).getByRole("status")).toHaveTextContent("1 card selected");
+
+    fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(screen.getByRole("heading", { name: "Where does it go?" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(screen.getByRole("button", { name: "Use value 5" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(screen.getByRole("heading", { name: "Take from either end." })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Take from either end." })).not.toBeInTheDocument());
   });
 
   it("previews and completes a projected Scout & Show option", () => {
@@ -115,7 +181,10 @@ describe("GameScreen action hints", () => {
     expect(screen.getByRole("heading", { name: "Choose your Show." })).toBeInTheDocument();
     const preview = screen.getByLabelText("Resulting hand preview");
     expect(preview.children).toHaveLength(demoGame.hand.length + 1);
+    expect(preview.querySelectorAll(".is-inserted")).toHaveLength(1);
     fireEvent.click(preview.children[2] as HTMLElement);
+    expect(within(preview.children[2] as HTMLElement).getByText("SCOUTED")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByRole("status")).toHaveTextContent("1 card selected");
     fireEvent.click(screen.getByRole("button", { name: "Confirm Scout & Show 1" }));
 
     expect(dispatch).toHaveBeenCalledWith({
@@ -150,6 +219,8 @@ describe("GameScreen action hints", () => {
     fireEvent.click(screen.getByRole("button", { name: "Scout & Show" }));
     fireEvent.click(screen.getByRole("button", { name: "Take left" }));
 
+    expect(screen.getByText(/newly Scouted card may use either available orientation now/i)).toBeInTheDocument();
+    expect(screen.getByText(/small OPPOSITE number is only a reference/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Use value 6" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Use value 5" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Choose a gap" })).toBeDisabled();
@@ -175,10 +246,24 @@ describe("GameScreen experience polish", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Which way is up?" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveTextContent(/large upright number is its active value for Show/i);
+    expect(dialog).toHaveTextContent(/small OPPOSITE number beneath it is a reference, not another choice/i);
     expect(screen.getByLabelText(`Full hand orientation preview, ${demoGame.hand.length} cards`).children).toHaveLength(demoGame.hand.length);
     expect(screen.getByText(`2 of ${demoGame.players.length} players locked`)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Lock this orientation" }));
     expect(dispatch).toHaveBeenCalledWith({ type: "choose-orientation", flipped: false });
+  });
+
+  it("explains locked active values in first-round and contextual help", () => {
+    render(<GameScreen state={{ ...demoGame, round: 1 }} connected dispatch={vi.fn()} />);
+
+    expect(screen.getByText(/the large upright number is active for Show/i)).toBeInTheDocument();
+    expect(screen.getByText(/small OPPOSITE number is a reference and cannot be selected/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show contextual help" }));
+    const help = screen.getByRole("dialog", { name: "It’s your move." });
+    expect(help).toHaveTextContent(/cannot be chosen for Show/i);
+    expect(help).toHaveTextContent(/newly Scouted card may choose either orientation/i);
   });
 
   it("makes preview controls explicitly read-only", () => {

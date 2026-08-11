@@ -7,12 +7,18 @@ normative source of truth; this document records the interpretation used by that
 
 The deck has one immutable card for each unordered pair `(low, high)` where
 `1 <= low < high <= 10`, for 45 unique cards. Orientation selects which endpoint is
-visible. A hand is an ordered array. Its order is fixed by the deal.
+active. In the interface, the large upright number labeled **ACTIVE** is the card's
+playable value. The small **OPPOSITE** number beneath it is only an opposite-side
+reference and cannot be selected as that card's value for a Show. A hand is an ordered
+array. Its order is fixed by the deal.
 
 Before play, each player either accepts the dealt hand or rotates the whole hand. A
 whole-hand rotation reverses card order and flips every card, matching a physical
-180-degree rotation. After locking, dealt cards cannot move or flip individually.
-Scouting is the only exception: the taken card may be flipped and inserted into any gap.
+180-degree rotation. After locking, dealt cards cannot move or flip individually, and
+players cannot choose between a card's active and opposite values for each Show.
+Scouting is the only exception: a newly Scouted card may choose either orientation only
+while it is inserted into any gap. That orientation is then locked with the rest of the
+hand.
 
 ## Setup
 
@@ -29,7 +35,9 @@ each round, so every player starts once.
 
 ## Show
 
-A Show removes one contiguous interval from the acting hand. One card is always legal.
+A Show removes one contiguous interval from the acting hand, using each card's active
+value. The opposite-side reference is never an alternate value choice. One card is
+always legal.
 Two or more cards must be:
 
 - a **set**: all visible values equal; or
@@ -49,9 +57,11 @@ Active Set and the showing player becomes its owner.
 
 ## Scout
 
-When an Active Set exists, a player may take exactly its leftmost or rightmost card,
-choose either orientation, and insert it into any hand gap. The Active Set otherwise
-keeps its order. If its last card is taken, the table becomes empty.
+When an Active Set exists, a player may take exactly its leftmost or rightmost card.
+During that card's insertion, the player may choose either orientation and insert it
+into any hand gap. After insertion, only its new active value is playable, just like the
+other locked cards in hand. The Active Set otherwise keeps its order. If its last card
+is taken, the table becomes empty.
 
 In games of 3–5 players, the Active Set owner gains one Scout point and turn passes
 clockwise.

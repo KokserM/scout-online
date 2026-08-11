@@ -43,23 +43,37 @@ export function GameHandActionBar({
 }: GameHandActionBarProps) {
   const reduceMotion = useReducedMotion();
   const isTurn = state.activePlayerId === state.selfId;
+  const handBehindDialog = scoutShowInProgress ? state.hand : displayedHand;
   return (
     <section className="hand-zone" aria-label="Your hand">
       <div className="hand-heading">
         <span><b>Your hand</b> · {state.hand.length} cards</span>
-        <span aria-live="polite">{selectionStatus}</span>
+        <span>{showCount} selected · {selectionStatus}</span>
       </div>
+      {state.round === 1 && (
+        <p className="orientation-hint">
+          <strong>Card key:</strong> the large upright number is active for Show. The small OPPOSITE number is a reference and cannot be selected.
+        </p>
+      )}
       <div className="hand-scroll">
-        <motion.div className="hand" layout={!reduceMotion}>
-          {displayedHand.map((card, index) => (
-            <GameCard card={card} selected={selection.isSelected(card.id)} {...selection.getCardProps(index)} key={card.id} />
+        <motion.div className="hand" layout={!scoutShowInProgress && !reduceMotion}>
+          {handBehindDialog.map((card, index) => (
+            scoutShowInProgress
+              ? <GameCard card={card} layoutAnimation={false} key={card.id} />
+              : <GameCard card={card} selected={selection.isSelected(card.id)} {...selection.getCardProps(index)} key={card.id} />
           ))}
         </motion.div>
       </div>
       <div className="action-bar">
-        <div className="turn-prompt">
-          <span className={isTurn ? "turn-dot is-live" : "turn-dot"} />
-          {readOnly ? <><Eye /> Preview only</> : isTurn ? "Choose your move" : "Watch the table"}
+        <div className="action-context">
+          <div className="turn-prompt">
+            <span className={isTurn ? "turn-dot is-live" : "turn-dot"} />
+            {readOnly ? <><Eye /> Preview only</> : isTurn ? "Choose your move" : "Watch the table"}
+          </div>
+          <div className="action-selection-feedback" role="status" aria-live="polite">
+            <strong>{showCount} {showCount === 1 ? "card" : "cards"} selected</strong>
+            <span>{selectionStatus}</span>
+          </div>
         </div>
         <div className="action-buttons">
           <button className="icon-button utility-action" onClick={onHelp} aria-label="Show contextual help"><HelpCircle /></button>

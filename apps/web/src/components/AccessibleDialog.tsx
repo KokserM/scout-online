@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 interface AccessibleDialogProps {
   children: ReactNode;
@@ -7,6 +7,8 @@ interface AccessibleDialogProps {
   labelledBy: string;
   onClose?: () => void;
   closeOnBackdrop?: boolean;
+  initialFocus?: string;
+  initialFocusKey?: string | number;
 }
 
 export function AccessibleDialog({
@@ -15,23 +17,26 @@ export function AccessibleDialog({
   labelledBy,
   onClose,
   closeOnBackdrop = false,
+  initialFocus,
+  initialFocusKey,
 }: AccessibleDialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useLayoutEffect(() => {
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
     const dialog = dialogRef.current;
-    const focusable = dialog?.querySelector<HTMLElement>(
-      "button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])",
-    );
-    (focusable ?? dialog)?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && onClose) {
+      if (event.key === "Escape" && onCloseRef.current) {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !dialog) return;
@@ -58,7 +63,32 @@ export function AccessibleDialog({
       document.removeEventListener("keydown", onKeyDown);
       restoreFocusRef.current?.focus();
     };
-  }, [onClose]);
+  }, []);
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const requestedTarget = initialFocus
+      ? dialog.querySelector<HTMLElement>(initialFocus)
+      : null;
+    const labelledTarget = document.getElementById(labelledBy);
+    const focusable = dialog.querySelector<HTMLElement>(
+      "button:not(:disabled), [href], input:not(:disabled), [tabindex]:not([tabindex='-1'])",
+    );
+    const target = requestedTarget
+      ?? (labelledTarget && dialog.contains(labelledTarget) ? labelledTarget : null)
+      ?? focusable
+      ?? dialog;
+    if (
+      target !== dialog
+      && !target.hasAttribute("tabindex")
+      && !target.matches("button, [href], input, select, textarea")
+    ) {
+      target.tabIndex = -1;
+    }
+    target.focus({ preventScroll: true });
+    target.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [initialFocus, initialFocusKey, labelledBy]);
 
   return (
     <motion.div

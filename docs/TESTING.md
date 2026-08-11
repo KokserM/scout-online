@@ -37,9 +37,11 @@ npx pnpm@10.15.0 install
   host transfer, both round transitions, final results, rematch, malformed payloads,
   turn authorization, forged cards, and recipient-specific projections.
 - Browser tests cover landing, create/join/ready/start, orientation, Quick Play, a real
-  two-browser Show and repeat-turn Scout workflow, and controls at 320×568, 375×667,
-  390×844, 430×932, 768×1024, 1280×720, 1440×900, and 1920×1080. They use overflow,
-  geometry, visibility, and reachability checks rather than brittle golden screenshots.
+  two-browser Show and repeat-turn Scout workflow, plus a three-browser Scout & Show
+  regression that verifies right-scrolled range selection at 320×568, 390×844,
+  430×932, 667×375, and 1440×900. General responsive checks also cover 375×667,
+  768×1024, and 1280×720. They use overflow, scroll-position, geometry, visibility,
+  and reachability checks rather than brittle golden screenshots.
   Deterministic result details and commands are component-tested; complete
   round/final/rematch behavior is verified at the real Socket.IO layer.
 
@@ -119,7 +121,7 @@ pixel-perfect rendering. Socket tests use a loopback server; rooms remain in mem
 
 ## Last complete local verification
 
-Verified on Windows on 2026-08-09 with Node.js 22.13.1 and pnpm 10.15.0:
+Verified on Windows on 2026-08-11 with Node.js 22.13.1 and pnpm 10.15.0:
 
 ```powershell
 npx --yes pnpm@10.15.0 typecheck
@@ -130,15 +132,16 @@ npx --yes pnpm@10.15.0 test:e2e
 ```
 
 - Typecheck: 4 workspace projects passed.
-- Unit/integration: 17 files, 96 tests passed. This total includes the two simulation
+- Unit/integration: 19 files, 105 tests passed. This total includes the two simulation
   tests because the engine's normal test command discovers them.
 - Explicit simulation gate: 1 file, 2 tests passed; the stress case completed exactly
   4,000 games (1,000 seeds at each of 2, 3, 4, and 5 players).
 - Build: 4 workspace projects passed; Vite transformed 2,120 modules and emitted the
   production HTML, CSS, and JavaScript assets.
-- Playwright: 20 project/test combinations discovered, 15 passed, and 5 were
-  intentionally skipped by project guards. The responsive test executed all eight
-  listed viewport sizes inside one desktop-project case.
+- Playwright: 20 project/test combinations discovered, 14 passed, and 6 were
+  intentionally skipped by project guards. The responsive and Scout & Show regressions
+  execute their acceptance viewport matrices inside desktop-project cases; the mobile
+  project uses Chromium with iPhone touch and viewport emulation.
 
 A local production start with `NODE_ENV=production` and `PORT=4179` also returned 200
 from `/health`, `/`, a deep extensionless SPA route, the built JavaScript asset, and the

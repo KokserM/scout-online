@@ -58,7 +58,14 @@ export function handRangeSelectionReducer(state: SelectionState, action: Selecti
 
 export function useHandRangeSelection(ids: readonly string[], resetKey: string) {
   const [state, send] = useReducer(handRangeSelectionReducer, ids.length, initialState);
-  const drag = useRef<{ pointerId: number; start: number } | undefined>(undefined);
+  const drag = useRef<{
+    pointerId: number;
+    pointerType: string;
+    start: number;
+    clientX: number;
+    clientY: number;
+    moved: boolean;
+  } | undefined>(undefined);
   const suppressClick = useRef(false);
   const previousResetKey = useRef(resetKey);
 
@@ -85,13 +92,34 @@ export function useHandRangeSelection(ids: readonly string[], resetKey: string) 
     },
     onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
       if (event.button > 0) return;
-      drag.current = { pointerId: event.pointerId ?? 0, start: index };
+      const pointerType = event.pointerType || "mouse";
+      drag.current = {
+        pointerId: event.pointerId ?? 0,
+        pointerType,
+        start: index,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        moved: false,
+      };
+      if (pointerType === "touch") {
+        suppressClick.current = false;
+        return;
+      }
       suppressClick.current = true;
       send({ type: "toggle", index });
     },
+    onPointerMove: (event: PointerEvent<HTMLButtonElement>) => {
+      const gesture = drag.current;
+      if (!gesture || gesture.pointerId !== (event.pointerId ?? 0) || gesture.pointerType !== "touch") return;
+      if (Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) >= 8) {
+        gesture.moved = true;
+        suppressClick.current = true;
+      }
+    },
     onPointerEnter: (event: PointerEvent<HTMLButtonElement>) => {
-      if (!drag.current || drag.current.pointerId !== (event.pointerId ?? 0)) return;
-      send({ type: "drag", from: drag.current.start, to: index });
+      const gesture = drag.current;
+      if (!gesture || gesture.pointerId !== (event.pointerId ?? 0) || gesture.pointerType === "touch") return;
+      send({ type: "drag", from: gesture.start, to: index });
     },
     onPointerUp: (event: PointerEvent<HTMLButtonElement>) => {
       if (drag.current?.pointerId === (event.pointerId ?? 0)) drag.current = undefined;
@@ -112,7 +140,9 @@ export function useHandRangeSelection(ids: readonly string[], resetKey: string) 
       send({ type: "move", index: next, extend: event.shiftKey });
       const parent = event.currentTarget.parentElement;
       requestAnimationFrame(() => {
-        (parent?.children[next] as HTMLElement | undefined)?.focus();
+        const nextCard = parent?.children[next] as HTMLElement | undefined;
+        nextCard?.focus({ preventScroll: true });
+        nextCard?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
       });
     },
   });

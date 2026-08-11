@@ -174,7 +174,8 @@ export function GameScreen({ state, connected, dispatch, readOnly = false }: Gam
             state={state}
             flow={scoutFlow}
             currentPlay={currentPlay}
-            {...(orientedPicked ? { pickedCard: orientedPicked } : {})}
+            {...(pickedCard ? { pickedCard: orientedPicked ?? pickedCard } : {})}
+            {...(orientedPicked ? { insertedCardId: orientedPicked.id } : {})}
             displayedHand={displayedHand}
             availableEndpoints={availableScoutEndpoints}
             selectionStatus={selectionStatus}
@@ -199,7 +200,8 @@ export function GameScreen({ state, connected, dispatch, readOnly = false }: Gam
             <p className="eyebrow">RIGHT NOW</p>
             <h1 id="game-help-title">{state.activePlayerId === state.selfId ? "It’s your move." : "Watch the active Show."}</h1>
             <p>{state.variant === "two-player" ? `Scout spends one of your ${self?.scoutChips ?? 0} remaining chips and lets you act again.` : `Scout takes an end card. Scout & Show is ${self?.scoutAndShowAvailable ? "still available" : "already used"} this round.`}</p>
-            <p>Select adjacent cards in your fixed hand. A longer Show wins; at equal length, sets beat runs and ties do not win.</p>
+            <p>Select adjacent cards in your fixed hand using only each card’s large upright active value. The small OPPOSITE number beneath it is a reference and cannot be chosen for Show.</p>
+            <p>Only a newly Scouted card may choose either orientation, and only while you insert it. A longer Show wins; at equal length, sets beat runs and ties do not win.</p>
             <button className="button button--primary" onClick={() => setHelpOpen(false)}>Got it</button>
           </AccessibleDialog>
         )}

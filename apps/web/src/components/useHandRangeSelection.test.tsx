@@ -1,8 +1,11 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { useHandRangeSelection } from "./useHandRangeSelection";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 function Harness({ ids, resetKey }: { ids: string[]; resetKey: string }) {
   const selection = useHandRangeSelection(ids, resetKey);
@@ -21,6 +24,19 @@ function Harness({ ids, resetKey }: { ids: string[]; resetKey: string }) {
       <output>{selection.selectedIds.join(",")}</output>
     </div>
   );
+}
+
+function dispatchPointer(
+  target: Element,
+  type: string,
+  { pointerId, clientX = 0, clientY = 0 }: { pointerId: number; clientX?: number; clientY?: number },
+) {
+  const event = new MouseEvent(type, { bubbles: true, button: 0, clientX, clientY });
+  Object.defineProperties(event, {
+    pointerId: { value: pointerId },
+    pointerType: { value: "touch" },
+  });
+  fireEvent(target, event);
 }
 
 describe("useHandRangeSelection", () => {
@@ -62,6 +78,48 @@ describe("useHandRangeSelection", () => {
     expect(screen.getByText("a,b,c", { selector: "output" })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole("button", { name: "c" }), { key: "Enter" });
     expect(screen.getByText("a,b", { selector: "output" })).toBeInTheDocument();
+  });
+
+  it("scrolls only the newly active right-side card into view", () => {
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+    render(<Harness ids={["a", "b", "c"]} resetKey="turn-1" />);
+    const buttons = screen.getAllByRole("button");
+    const container = buttons[0]!.parentElement!;
+    container.scrollLeft = 240;
+    const scrollSpies = buttons.map((button) => {
+      const scrollIntoView = vi.fn();
+      button.scrollIntoView = scrollIntoView;
+      return scrollIntoView;
+    });
+
+    fireEvent.keyDown(buttons[0]!, { key: "ArrowRight" });
+
+    expect(buttons[1]).toHaveFocus();
+    expect(scrollSpies[0]).not.toHaveBeenCalled();
+    expect(scrollSpies[1]).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    expect(scrollSpies[2]).not.toHaveBeenCalled();
+    expect(container.scrollLeft).toBe(240);
+  });
+
+  it("does not toggle cards when a touch pans or is cancelled", () => {
+    render(<Harness ids={["a", "b"]} resetKey="turn-1" />);
+    const [first, second] = screen.getAllByRole("button");
+    const container = first!.parentElement!;
+    container.scrollLeft = 90;
+
+    dispatchPointer(first!, "pointerdown", { pointerId: 5, clientX: 160, clientY: 20 });
+    dispatchPointer(first!, "pointermove", { pointerId: 5, clientX: 90, clientY: 22 });
+    dispatchPointer(first!, "pointerup", { pointerId: 5 });
+    fireEvent.click(first!);
+
+    dispatchPointer(second!, "pointerdown", { pointerId: 6, clientX: 80, clientY: 20 });
+    dispatchPointer(second!, "pointercancel", { pointerId: 6 });
+
+    expect(document.querySelector("output")).toHaveTextContent("");
+    expect(container.scrollLeft).toBe(90);
   });
 
   it("resets on authoritative identity changes", () => {

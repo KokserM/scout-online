@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
+import { useLayoutEffect, useRef } from "react";
 import type { Card, GameState, Play } from "../protocol/types";
 import { AccessibleDialog } from "./AccessibleDialog";
 import { GameCard } from "./GameCard";
@@ -18,6 +19,7 @@ interface ScoutWorkflowDialogProps {
   flow: ScoutFlow;
   currentPlay: Play;
   pickedCard?: Card;
+  insertedCardId?: string;
   displayedHand: Card[];
   availableEndpoints: ("start" | "end")[];
   selectionStatus: string;
@@ -42,6 +44,7 @@ export function ScoutWorkflowDialog({
   flow,
   currentPlay,
   pickedCard,
+  insertedCardId,
   displayedHand,
   availableEndpoints,
   selectionStatus,
@@ -60,12 +63,38 @@ export function ScoutWorkflowDialog({
   onBack,
   onCancel,
 }: ScoutWorkflowDialogProps) {
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previewScrollLeftRef = useRef(0);
+  const pendingPreviewScrollLeftRef = useRef<number | null>(null);
+  const selectedIdsKey = selectedIds.join("\0");
+
+  useLayoutEffect(() => {
+    if (flow.stage !== "show") return;
+    const preview = previewRef.current;
+    if (!preview) return;
+    const scrollLeft = pendingPreviewScrollLeftRef.current ?? previewScrollLeftRef.current;
+    preview.scrollLeft = scrollLeft;
+    previewScrollLeftRef.current = scrollLeft;
+    pendingPreviewScrollLeftRef.current = null;
+  }, [flow.stage, selectedIdsKey]);
+
+  const preservePreviewScrollForSelection = () => {
+    const preview = previewRef.current;
+    if (preview) pendingPreviewScrollLeftRef.current = preview.scrollLeft;
+  };
+
   return (
-    <AccessibleDialog className="choice-card scout-choice" labelledBy="scout-title" onClose={onCancel}>
+    <AccessibleDialog
+      className="choice-card scout-choice"
+      labelledBy="scout-title"
+      initialFocus="#scout-title"
+      initialFocusKey={flow.stage}
+      onClose={onCancel}
+    >
       <p className="eyebrow">{flow.kind === "scout-and-show" ? "SCOUT & SHOW" : "SCOUT A CARD"}</p>
       {flow.stage === "endpoint" ? (
         <>
-          <h1 id="scout-title">Take from either end.</h1>
+          <h1 id="scout-title" tabIndex={-1}>Take from either end.</h1>
           <p>Pick one legal end card from the current play.</p>
           <div className="scout-row">
             <button className="scout-end" disabled={!availableEndpoints.includes("start")} onClick={() => onEndpoint("start")}><ChevronLeft /> Take left</button>
@@ -75,8 +104,8 @@ export function ScoutWorkflowDialog({
         </>
       ) : flow.stage === "orientation" ? (
         <>
-          <h1 id="scout-title">Which way is up?</h1>
-          <p>Choose one of the orientations that can continue this move.</p>
+          <h1 id="scout-title" tabIndex={-1}>Set the Scouted card’s orientation.</h1>
+          <p>This newly Scouted card may use either available orientation now, before insertion. Once inserted, its large upright active value is locked; the small OPPOSITE number is only a reference.</p>
           {pickedCard && <div className="scout-card-preview"><GameCard card={pickedCard} compact /></div>}
           <div className="stage-actions" role="group" aria-label="Choose card orientation">
             {availableFlips.map((flipped) => {
@@ -104,8 +133,14 @@ export function ScoutWorkflowDialog({
         </>
       ) : flow.stage === "insertion" ? (
         <>
-          <h1 id="scout-title">Where does it go?</h1>
-          <p>Every legal gap is shown once. Your hand’s order stays unchanged.</p>
+          <h1 id="scout-title" tabIndex={-1}>Where does it go?</h1>
+          <p>Every legal gap is shown once. The Scouted card’s orientation is now set, and the rest of your hand stays unchanged.</p>
+          {pickedCard && (
+            <div className="scouted-card-key" aria-label="Scouted card to insert">
+              <GameCard card={pickedCard} compact inserted />
+              <strong>SCOUTED card</strong>
+            </div>
+          )}
           <div className="insertion-picker" aria-label="Choose insertion position">
             {Array.from({ length: state.hand.length + 1 }, (_, index) => (
               <div className="insertion-gap-item" key={`gap-${index}`}>
@@ -117,19 +152,36 @@ export function ScoutWorkflowDialog({
         </>
       ) : flow.stage === "confirm" ? (
         <>
-          <h1 id="scout-title">Confirm this Scout?</h1>
-          <p>The highlighted card will be inserted here only after you confirm.</p>
-          <div className="preview-hand" aria-label="Resulting hand preview">{displayedHand.map((card) => <GameCard card={card} compact key={card.id} />)}</div>
+          <h1 id="scout-title" tabIndex={-1}>Confirm this Scout?</h1>
+          <p>The card marked SCOUTED will be inserted here only after you confirm. Its large upright number is the active value.</p>
+          <div className="preview-hand" aria-label="Resulting hand preview">{displayedHand.map((card) => <GameCard card={card} compact inserted={card.id === insertedCardId} key={card.id} />)}</div>
           <button className="button button--primary" onClick={onConfirmScout}>Confirm Scout</button>
         </>
       ) : (
         <>
-          <h1 id="scout-title">Choose your Show.</h1>
-          <p>This is your resulting hand. Select a contiguous legal range to complete both actions.</p>
-          <div className="preview-hand selectable-preview" aria-label="Resulting hand preview">
-            {displayedHand.map((card, index) => <GameCard card={card} selected={isSelected(card.id)} {...getCardProps(index)} key={card.id} />)}
+          <h1 id="scout-title" tabIndex={-1}>Choose your Show.</h1>
+          <p>This is your resulting hand. Select a contiguous legal range using only each card’s large upright active value.</p>
+          <div
+            ref={previewRef}
+            className="preview-hand selectable-preview"
+            aria-label="Resulting hand preview"
+            onScroll={(event) => {
+              previewScrollLeftRef.current = event.currentTarget.scrollLeft;
+              if (pendingPreviewScrollLeftRef.current !== null) {
+                pendingPreviewScrollLeftRef.current = event.currentTarget.scrollLeft;
+              }
+            }}
+            onPointerDownCapture={preservePreviewScrollForSelection}
+            onKeyDownCapture={(event) => {
+              if (event.key === " " || event.key === "Enter") preservePreviewScrollForSelection();
+            }}
+          >
+            {displayedHand.map((card, index) => <GameCard card={card} selected={isSelected(card.id)} inserted={card.id === insertedCardId} layoutAnimation={false} {...getCardProps(index)} key={card.id} />)}
           </div>
-          <p aria-live="polite">{selectionStatus}</p>
+          <div className="selection-feedback" role="status" aria-live="polite">
+            <strong>{selectedIds.length} {selectedIds.length === 1 ? "card" : "cards"} selected</strong>
+            <span>{selectionStatus}</span>
+          </div>
           <button className="button button--primary" disabled={!showIsLegal} onClick={onShow}>Confirm Scout &amp; Show {selectedIds.length || ""}</button>
         </>
       )}

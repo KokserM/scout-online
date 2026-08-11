@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import type { CSSProperties, KeyboardEventHandler, PointerEventHandler } from "react";
 import type { Card } from "../protocol/types";
 
@@ -7,13 +7,16 @@ export type CardPlayability = "neutral" | "legal" | "illegal" | "scoutable";
 interface GameCardProps {
   card: Card;
   selected?: boolean;
+  inserted?: boolean;
   flipped?: boolean;
   compact?: boolean;
+  layoutAnimation?: boolean;
   playability?: CardPlayability;
   onClick?: () => void;
   tabIndex?: number;
   onKeyDown?: KeyboardEventHandler<HTMLButtonElement>;
   onPointerDown?: PointerEventHandler<HTMLButtonElement>;
+  onPointerMove?: PointerEventHandler<HTMLButtonElement>;
   onPointerEnter?: PointerEventHandler<HTMLButtonElement>;
   onPointerUp?: PointerEventHandler<HTMLButtonElement>;
   onPointerCancel?: PointerEventHandler<HTMLButtonElement>;
@@ -50,17 +53,21 @@ export function getCardDesign(id: string) {
 export function GameCard({
   card,
   selected,
+  inserted,
   flipped,
   compact,
+  layoutAnimation = true,
   playability = "neutral",
   onClick,
   tabIndex,
   onKeyDown,
   onPointerDown,
+  onPointerMove,
   onPointerEnter,
   onPointerUp,
   onPointerCancel,
 }: GameCardProps) {
+  const reduceMotion = useReducedMotion();
   const design = getCardDesign(card.id);
   const palette = CARD_PALETTES[design.palette] ?? CARD_PALETTES[0];
   const activeTop = flipped ? card.bottom : card.top;
@@ -74,10 +81,12 @@ export function GameCard({
   } as CSSProperties;
   const stateLabel =
     playability === "neutral" ? "" : `, ${playability}`;
+  const valueLabel = `active ${activeTop}, opposite ${activeBottom}`;
 
   const content = (
     <div
       className={`game-card game-card--motif-${design.motif}`}
+      aria-hidden="true"
       data-motif={design.motif}
       data-palette={design.palette}
       data-playability={playability}
@@ -85,43 +94,49 @@ export function GameCard({
     >
       <span className="card-grain" aria-hidden="true" />
       <span className="card-motif" aria-hidden="true"><i /><i /><i /></span>
-      <span className="card-end card-end--top" data-testid="card-top-cluster">
-        <span className="card-active-label">TOP</span>
+      <span className="card-values" data-testid="card-value-cluster">
+        <span className="card-active-label">ACTIVE</span>
         <strong className="card-value card-value--playable">{activeTop}</strong>
-        <small className="card-value card-value--opposite">{activeBottom}</small>
-      </span>
-      <span className="card-center-mark" aria-hidden="true"><b>PLAY</b><i>◆</i></span>
-      <span className="card-end card-end--bottom" data-testid="card-bottom-cluster">
-        <strong className="card-value card-value--playable">{activeBottom}</strong>
-        <small className="card-value card-value--opposite">{activeTop}</small>
+        <span className="card-opposite-reference">
+          <small className="card-opposite-label">OPPOSITE</small>
+          <small className="card-value card-value--opposite">{activeBottom}</small>
+        </span>
       </span>
       {playability !== "neutral" && (
         <span className="card-state" aria-hidden="true">
           {playability === "legal" ? "✓ LEGAL" : playability === "illegal" ? "× BLOCKED" : "↗ SCOUT"}
         </span>
       )}
+      {inserted && <span className="card-inserted-marker" aria-hidden="true">SCOUTED</span>}
+      {selected && <span className="card-selected-marker" aria-hidden="true"><b>✓</b> SELECTED</span>}
     </div>
   );
 
-  if (!onClick) return <div className={compact ? "card-wrap is-compact" : "card-wrap"}>{content}</div>;
+  const stateClasses = `${compact ? "is-compact" : ""} ${selected ? "is-selected" : ""} ${inserted ? "is-inserted" : ""}`;
+  const accessibleState = `${selected ? ", selected" : ""}${inserted ? ", Scouted card" : ""}${stateLabel}`;
+
+  if (!onClick) return <div className={`card-wrap ${stateClasses}`} role="img" aria-label={`${valueLabel}${accessibleState}`}>{content}</div>;
 
   return (
     <motion.button
       type="button"
-      className={`card-wrap card-button ${compact ? "is-compact" : ""} ${selected ? "is-selected" : ""} is-${playability}`}
+      className={`card-wrap card-button ${stateClasses} is-${playability}`}
       aria-pressed={selected}
-      aria-label={`${activeTop} over ${activeBottom}${selected ? ", selected" : ""}${stateLabel}`}
+      aria-label={`${valueLabel}${accessibleState}`}
       disabled={playability === "illegal"}
       onClick={onClick}
       tabIndex={tabIndex}
       onKeyDown={onKeyDown}
       onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
       onPointerEnter={onPointerEnter}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
-      whileHover={{ y: -8 }}
-      whileTap={{ scale: 0.97 }}
-      layout
+      {...(!reduceMotion ? {
+        whileHover: { y: selected ? -24 : -8 },
+        whileTap: { scale: 0.97 },
+      } : {})}
+      layout={layoutAnimation}
     >
       {content}
     </motion.button>

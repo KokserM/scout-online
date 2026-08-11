@@ -60,13 +60,13 @@ test("live game remains operable at every acceptance viewport", async ({
       });
       const page = await context.newPage();
       await page.goto("/");
-      await page.getByLabel("Your display name").fill(`Viewport ${index}`);
+      await page.getByLabel("Your display name", { exact: true }).fill(`Viewport ${index}`);
       await page.getByRole("button", { name: /Quick play/i }).click();
 
       const orientation = page.getByRole("dialog", { name: /Which way is up/i });
       await expect(orientation).toBeVisible();
       await expectInsideViewport(orientation, viewport.width, viewport.height);
-      const fullHand = page.getByLabel(/Full hand orientation preview/);
+      const fullHand = page.getByLabel(/Full hand orientation preview, \d+ cards/);
       expect(await fullHand.locator(".card-wrap").count()).toBeGreaterThan(5);
       expect(await fullHand.evaluate((element) => element.scrollWidth >= element.clientWidth)).toBe(true);
       await fullHand.locator(".card-wrap").last().scrollIntoViewIfNeeded();
@@ -101,7 +101,7 @@ test("lobby QR dialog fits every acceptance viewport", async ({ page }, testInfo
   test.setTimeout(60_000);
   test.skip(testInfo.project.name !== "desktop");
   await page.goto("/");
-  await page.getByLabel("Your display name").fill("QR host");
+  await page.getByLabel("Your display name", { exact: true }).fill("QR host");
   await page.getByRole("button", { name: /Create room/i }).click();
   await page.getByRole("button", { name: /Invite players/i }).click();
 
