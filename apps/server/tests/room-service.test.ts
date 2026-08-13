@@ -14,6 +14,8 @@ interface FakeState {
   activePlayerId: string;
   phase: "orientation" | "playing" | "round-results" | "final";
   rulesMode: RulesMode;
+  scoutTargetId?: string;
+  roundOutcome?: EnginePlayerView["roundOutcome"];
 }
 
 const fakeEngine: GameEngine = {
@@ -477,10 +479,167 @@ describe("RoomService", () => {
       expect.objectContaining({ code: "SEAT_LOST" }),
     );
   });
+
+  it("names the Show owner when a standard Scout awards a point", () => {
+    const { service, host, guest } = startSeatedGame(activityEngine(), 3);
+    const ownerName = guest.player!.name;
+    service.perform(host.sessionToken, {
+      actionId: randomUUID(),
+      type: "game:scout",
+      playId: "show_1",
+      position: "start",
+      insertAt: 0,
+      flipped: false,
+    });
+    const messages = host.room!.activity.map((item) => item.message);
+    expect(messages).toContain(
+      `${host.player!.name} scouted the left card.`,
+    );
+    expect(messages).toContain(`${ownerName} gained +1 Scout.`);
+    expect(
+      host.room!.activity.find((item) => item.message === `${ownerName} gained +1 Scout.`)
+        ?.tone,
+    ).toBe("good");
+  });
+
+  it("records a spent Scout chip in two-player without claiming a Scout point", () => {
+    const { service, host } = startSeatedGame(activityEngine(), 2);
+    service.perform(host.sessionToken, {
+      actionId: randomUUID(),
+      type: "game:scout",
+      playId: "show_1",
+      position: "end",
+      insertAt: 0,
+      flipped: false,
+    });
+    const messages = host.room!.activity.map((item) => item.message);
+    expect(messages).toContain(`${host.player!.name} spent a Scout chip.`);
+    expect(messages.some((message) => message.includes("+1 Scout"))).toBe(
+      false,
+    );
+  });
+
+  it("writes reason-specific public round-end lines", () => {
+    const cases = [
+      {
+        reason: "empty-hand" as const,
+        line: "Host went out with an empty hand.",
+      },
+      {
+        reason: "all-scouted" as const,
+        line: "Everyone Scouted Host’s Show. It stood unbeaten.",
+      },
+      {
+        reason: "two-player-stuck" as const,
+        line: "Host takes the round — no Show left and no Scout chips.",
+      },
+    ];
+    for (const { reason, line } of cases) {
+      const { service, host } = startSeatedGame(
+        activityEngine({
+          endReason: reason,
+          winnerIsActor: true,
+        }),
+        reason === "two-player-stuck" ? 2 : 3,
+      );
+      const cardId = service.stateFor(host.room!, host.player!.id).hand[0]!.id;
+      service.perform(host.sessionToken, {
+        actionId: randomUUID(),
+        type: "game:show",
+        cardIds: [cardId],
+        valueMode: "active",
+      });
+      expect(host.room!.activity.map((item) => item.message)).toContain(line);
+    }
+  });
 });
 
 function asFakeState(state: unknown): FakeState {
   if (typeof state !== "object" || state === null || !("playerIds" in state))
     throw new Error("Bad fake state");
   return state as FakeState;
+}
+
+function activityEngine(
+  options: {
+    endReason?: "empty-hand" | "all-scouted" | "two-player-stuck";
+    winnerIsActor?: boolean;
+  } = {},
+): GameEngine {
+  return {
+    ...fakeEngine,
+    createGame(playerIds, rulesMode = "official") {
+      const state = asFakeState(fakeEngine.createGame(playerIds, rulesMode));
+      return { ...state, scoutTargetId: playerIds[1] };
+    },
+    applyAction(state, playerId, action) {
+      const current = asFakeState(state);
+      if (action.type === "game:scout" || action.type === "game:scout-and-show") {
+        return { ...current, scoutTargetId: undefined };
+      }
+      if (action.type === "game:show" && options.endReason) {
+        const winnerId = options.winnerIsActor
+          ? playerId
+          : (current.playerIds[1] ?? playerId);
+        return {
+          ...current,
+          phase: "round-results",
+          roundOutcome: {
+            reason: options.endReason,
+            winnerId,
+            ...(options.endReason === "all-scouted"
+              ? { protectedPlayerId: winnerId }
+              : {}),
+          },
+        };
+      }
+      return asFakeState(fakeEngine.applyAction(state, playerId, action));
+    },
+    getPlayerView(state, playerId) {
+      const current = asFakeState(state);
+      return {
+        ...fakeEngine.getPlayerView(state, playerId),
+        phase: current.phase,
+        variant: current.playerIds.length === 2 ? "two-player" : "standard",
+        ...(current.scoutTargetId
+          ? { scoutTargetId: current.scoutTargetId }
+          : {}),
+        ...(current.roundOutcome ? { roundOutcome: current.roundOutcome } : {}),
+      };
+    },
+  };
+}
+
+function startSeatedGame(engine: GameEngine, playerCount: 2 | 3) {
+  const service = new RoomService(new InMemoryRoomRepository(), engine);
+  const host = service.perform(undefined, {
+    actionId: randomUUID(),
+    type: "room:create",
+    name: "Host",
+  });
+  const guest = service.perform(undefined, {
+    actionId: randomUUID(),
+    type: "room:join",
+    roomCode: host.room!.code,
+    name: "Guest",
+  });
+  if (playerCount === 3) {
+    service.perform(host.sessionToken, {
+      actionId: randomUUID(),
+      type: "host:add-bot",
+      difficulty: "standard",
+    });
+  }
+  for (const token of [host.sessionToken, guest.sessionToken]) {
+    service.perform(token, {
+      actionId: randomUUID(),
+      type: "player:set-ready",
+      ready: true,
+    });
+  }
+  service.perform(host.sessionToken, {
+    actionId: randomUUID(),
+    type: "game:start",
+  });
+  return { service, host, guest };
 }

@@ -367,12 +367,13 @@ test("a live round reaches responsive results", async ({ browser }, testInfo) =>
 
   const pages = [host, guest];
   for (let turn = 0; turn < 80; turn += 1) {
-    if (await host.getByRole("heading", { name: "That’s the round." }).isVisible()) break;
+    if (await host.getByText(/ROUND \d+ COMPLETE/).isVisible()) break;
     const active = await waitForActivePage(pages);
     await completeLegalTurn(active);
   }
 
-  await expect(host.getByRole("dialog", { name: "That’s the round." })).toBeVisible();
+  await expect(host.getByRole("dialog")).toBeVisible();
+  await expect(host.getByText(/ROUND \d+ COMPLETE/)).toBeVisible();
   for (const viewport of [
     { width: 320, height: 568 },
     { width: 390, height: 844 },
@@ -381,7 +382,7 @@ test("a live round reaches responsive results", async ({ browser }, testInfo) =>
     { width: 1440, height: 900 },
   ]) {
     await host.setViewportSize(viewport);
-    const dialog = host.getByRole("dialog", { name: "That’s the round." });
+    const dialog = host.getByRole("dialog");
     await dialog.getByRole("button", { name: "Next round" }).scrollIntoViewIfNeeded();
     const box = await dialog.boundingBox();
     expect(box).not.toBeNull();

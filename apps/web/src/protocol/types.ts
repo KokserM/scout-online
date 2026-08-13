@@ -109,6 +109,7 @@ export interface GameState {
   mustChooseOrientation: boolean;
   availableActions: AvailableActions;
   roundScores?: RoundScore[] | undefined;
+  roundOutcome?: RoundOutcome | undefined;
   activity: Activity[];
   canStart: boolean;
   reconnectGraceMs: number;
@@ -123,6 +124,14 @@ export interface RoundScore {
   handPenaltyExempt: boolean;
   roundTotal: number;
   cumulativeTotal: number;
+}
+
+export type RoundEndReason = "empty-hand" | "all-scouted" | "two-player-stuck";
+
+export interface RoundOutcome {
+  reason: RoundEndReason;
+  winnerId: string;
+  protectedPlayerId?: string | undefined;
 }
 
 export type ClientAction =

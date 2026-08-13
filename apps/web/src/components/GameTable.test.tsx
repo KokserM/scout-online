@@ -93,13 +93,63 @@ describe("GameTable", () => {
     expect(container.querySelector(".turn-pill")).toHaveTextContent("Maya");
 
     const maya = screen.getByRole("article", {
-      name: "Maya, 9 cards left, playing",
+      name: "Maya, 9 cards left, playing, Show",
     });
     expect(maya).toHaveAttribute("aria-current", "true");
     expect(maya).toHaveTextContent("Playing");
+    expect(maya).toHaveTextContent("Show");
     expect(maya.querySelector(".hand-count-badge")).toHaveTextContent(/9/);
     expect(maya.querySelector(".hand-count-badge")).toHaveTextContent(/left/i);
     expect(maya.querySelector(".mini-hand-more")).toHaveTextContent("+3");
     expect(maya.querySelectorAll(".mini-hand i")).toHaveLength(6);
+  });
+
+  it("marks the Show owner separately from the player whose turn it is", () => {
+    render(
+      <OpponentStrip
+        state={{
+          ...demoGame,
+          activePlayerId: "theo",
+          scoutTargetId: "maya",
+        }}
+      />,
+    );
+    const maya = screen.getByRole("article", {
+      name: "Maya, 5 cards left, Show",
+    });
+    const theo = screen.getByRole("article", {
+      name: "Theo, 8 cards left, playing",
+    });
+    expect(maya.querySelector(".show-marker")).toHaveTextContent("Show");
+    expect(theo.querySelector(".playing-marker")).toHaveTextContent("Playing");
+    expect(theo.querySelector(".show-marker")).not.toBeInTheDocument();
+  });
+
+  it("pulses a +1 Scout award on the local score and opponent badge", () => {
+    const { container } = render(
+      <>
+        <OpponentStrip
+          state={demoGame}
+          scoutAwardIds={["maya"]}
+          pulseKey={1}
+        />
+        <GameTable
+          state={demoGame}
+          logOpen={false}
+          onToggleLog={vi.fn()}
+          onCloseLog={vi.fn()}
+          scoutFeedback={{
+            selfAward: true,
+            opponentAwardIds: ["maya"],
+            caption: "Maya earns +1 Scout",
+            pulseKey: 1,
+          }}
+        />
+      </>,
+    );
+    expect(screen.getByText("+1 SCOUT")).toBeInTheDocument();
+    expect(screen.getByText("Maya earns +1 Scout")).toBeInTheDocument();
+    expect(container.querySelector(".you-scout-line")).toHaveTextContent("2 Scout");
+    expect(container.querySelector(".scout-award-float")).toHaveTextContent("+1");
   });
 });

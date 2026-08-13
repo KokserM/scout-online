@@ -1,5 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import {
+  applyRoundAction,
+  createScoutDeck,
+  createRoundFromHands,
+  deckForPlayerCount,
+  orientCard,
+  type GameState,
+  type OrientedCard,
+  type PlayerCount,
+  type RoundState,
+} from "@grandstand/game-engine";
 import { createGameEngine } from "../src/game-engine-adapter.js";
 import { InMemoryRoomRepository } from "../src/room-repository.js";
 import { RoomService, ServiceError } from "../src/room-service.js";
@@ -248,6 +259,107 @@ describe("game-engine adapter", () => {
       collectStrings(service.stateFor(host.room!, observer.player!.id)),
     ).not.toContain(scoutedCardId);
   });
+
+  it("projects empty-hand, all-scouted, and two-player-stuck round outcomes", () => {
+    const engine = createGameEngine();
+
+    let emptyHand = createRoundFromHands(
+      {
+        a: [c(1, 7), c(2, 8), c(6, 10)],
+        b: [c(4, 8), c(4, 9)],
+        c: [c(3, 7)],
+      },
+      ["a", "b", "c"],
+      "a",
+    );
+    emptyHand = applyRoundAction(emptyHand, "a", {
+      type: "show",
+      start: 0,
+      end: 1,
+      valueMode: "active",
+    });
+    emptyHand = applyRoundAction(emptyHand, "b", {
+      type: "show",
+      start: 0,
+      end: 1,
+      valueMode: "active",
+    });
+    expect(engine.getPlayerView(wrapRound(emptyHand), "a").roundOutcome).toEqual(
+      {
+        reason: "empty-hand",
+        winnerId: "b",
+      },
+    );
+
+    let allScouted = createRoundFromHands(
+      {
+        a: [c(1, 7), c(2, 8), c(9, 10)],
+        b: [c(4, 7)],
+        c: [c(5, 8)],
+      },
+      ["a", "b", "c"],
+      "a",
+    );
+    allScouted = applyRoundAction(allScouted, "a", {
+      type: "show",
+      start: 0,
+      end: 1,
+      valueMode: "active",
+    });
+    allScouted = applyRoundAction(allScouted, "b", {
+      type: "scout",
+      side: "left",
+      insertAt: 0,
+      flipped: false,
+    });
+    allScouted = applyRoundAction(allScouted, "c", {
+      type: "scout",
+      side: "left",
+      insertAt: 0,
+      flipped: false,
+    });
+    expect(
+      engine.getPlayerView(wrapRound(allScouted), "a").roundOutcome,
+    ).toEqual({
+      reason: "all-scouted",
+      winnerId: "a",
+      protectedPlayerId: "a",
+    });
+
+    let stuck = createRoundFromHands(
+      {
+        a: [c(8, 9), c(9, 10), c(1, 10)],
+        b: [c(1, 4), c(2, 6)],
+      },
+      ["a", "b"],
+      "a",
+      "two-player",
+    );
+    const stuckB = stuck.players.b;
+    expect(stuckB).toBeDefined();
+    stuck = {
+      ...stuck,
+      players: {
+        ...stuck.players,
+        b: { ...stuckB!, twoPlayerScoutChips: 0 },
+      },
+    };
+    stuck = applyRoundAction(stuck, "a", {
+      type: "show",
+      start: 0,
+      end: 1,
+      valueMode: "active",
+    });
+    const stuckOutcome = engine.getPlayerView(
+      wrapRound(stuck),
+      "a",
+    ).roundOutcome;
+    expect(stuckOutcome).toEqual({
+      reason: "two-player-stuck",
+      winnerId: "a",
+    });
+    expect(stuckOutcome?.protectedPlayerId).toBeUndefined();
+  });
 });
 
 function collectStrings(value: unknown): string[] {
@@ -255,4 +367,31 @@ function collectStrings(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(collectStrings);
   if (typeof value !== "object" || value === null) return [];
   return Object.values(value).flatMap(collectStrings);
+}
+
+function c(low: number, high: number, flipped = false): OrientedCard {
+  const card = createScoutDeck().find(
+    (candidate) => candidate.low === low && candidate.high === high,
+  );
+  if (card === undefined) throw new Error(`Missing ${low}-${high}`);
+  return orientCard(card, flipped);
+}
+
+function wrapRound(round: RoundState): GameState {
+  const playerCount = round.playerOrder.length as PlayerCount;
+  const split = deckForPlayerCount(2);
+  return {
+    rulesMode: round.rulesMode,
+    playerOrder: [...round.playerOrder],
+    playerCount,
+    initialStartingPlayerId: round.startingPlayerId,
+    roundNumber: 1,
+    totalRounds: playerCount === 2 ? 2 : playerCount,
+    round,
+    totals: Object.fromEntries(round.playerOrder.map((id) => [id, 0])),
+    status: { kind: "active" },
+    twoPlayerRoundDecks:
+      playerCount === 2 ? [split.slice(0, 22), split.slice(22)] : [],
+    scoredCurrentRound: round.status.kind === "ended",
+  };
 }

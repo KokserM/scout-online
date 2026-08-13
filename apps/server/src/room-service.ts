@@ -324,6 +324,9 @@ export class RoomService {
       ...(engineView?.roundScores
         ? { roundScores: engineView.roundScores }
         : {}),
+      ...(engineView?.roundOutcome
+        ? { roundOutcome: engineView.roundOutcome }
+        : {}),
       activity: [...room.activity, ...(engineView?.activity ?? [])].slice(-30),
       canStart,
       reconnectGraceMs: this.reconnectGraceMs,
@@ -573,12 +576,18 @@ export class RoomService {
       case "game:scout-and-show":
         if (room.engineState === undefined)
           throw new ServiceError("INVALID_STATE", "The game has not started");
-        room.engineState = this.applyEngineAction(
-          room.engineState,
-          player.id,
-          action,
-        );
-        this.recordGameAction(room, player, action);
+        {
+          const scoutOwnerId =
+            action.type === "game:scout" || action.type === "game:scout-and-show"
+              ? this.peekScoutOwnerId(room, player.id)
+              : undefined;
+          room.engineState = this.applyEngineAction(
+            room.engineState,
+            player.id,
+            action,
+          );
+          this.recordGameAction(room, player, action, scoutOwnerId);
+        }
         return;
       case "room:leave":
         if (room.engineState === undefined) {
@@ -636,6 +645,10 @@ export class RoomService {
         );
       }
       this.engine.assertState?.(next);
+      const scoutOwnerId =
+        action.type === "game:scout" || action.type === "game:scout-and-show"
+          ? this.engine.getPlayerView(previous, bot.id).scoutTargetId
+          : undefined;
       room.engineState = next;
       if (
         action.type === "game:choose-orientation" ||
@@ -643,7 +656,7 @@ export class RoomService {
         action.type === "game:scout" ||
         action.type === "game:scout-and-show"
       ) {
-        this.recordGameAction(room, bot, action);
+        this.recordGameAction(room, bot, action, scoutOwnerId);
       }
       room.updatedAt = this.now();
       this.repository.save(room);
@@ -687,6 +700,11 @@ export class RoomService {
       throw new ServiceError("FORBIDDEN", "Only the host can do that");
   }
 
+  private peekScoutOwnerId(room: Room, viewerId: string): string | undefined {
+    if (room.engineState === undefined) return undefined;
+    return this.engine.getPlayerView(room.engineState, viewerId).scoutTargetId;
+  }
+
   private recordGameAction(
     room: Room,
     player: RoomPlayer,
@@ -700,6 +718,7 @@ export class RoomService {
           | "game:scout-and-show";
       }
     >,
+    scoutOwnerId?: string,
   ): void {
     if (action.type === "game:choose-orientation") {
       room.activity.push(
@@ -717,7 +736,8 @@ export class RoomService {
           `${player.name} scouted the ${action.position === "start" ? "left" : "right"} card.`,
         ),
       );
-      this.recordCompletionActivity(room, view?.phase);
+      this.recordScoutConsequence(room, player, view, scoutOwnerId);
+      this.recordCompletionActivity(room, view);
       return;
     }
     const values = view?.table
@@ -738,18 +758,57 @@ export class RoomService {
         "good",
       ),
     );
-    this.recordCompletionActivity(room, view?.phase);
+    if (action.type === "game:scout-and-show") {
+      this.recordScoutConsequence(room, player, view, scoutOwnerId);
+    }
+    this.recordCompletionActivity(room, view);
+  }
+
+  private recordScoutConsequence(
+    room: Room,
+    player: RoomPlayer,
+    view: EnginePlayerView | undefined,
+    scoutOwnerId: string | undefined,
+  ): void {
+    if (view?.variant === "two-player") {
+      room.activity.push(this.activity(`${player.name} spent a Scout chip.`));
+      return;
+    }
+    const ownerName = scoutOwnerId
+      ? room.players.get(scoutOwnerId)?.name
+      : undefined;
+    if (ownerName) {
+      room.activity.push(this.activity(`${ownerName} gained +1 Scout.`, "good"));
+    }
   }
 
   private recordCompletionActivity(
     room: Room,
-    phase: EnginePlayerView["phase"] | undefined,
+    view: EnginePlayerView | undefined,
   ): void {
-    if (phase === "round-results") {
-      room.activity.push(this.activity("Round complete.", "warning"));
-    } else if (phase === "final") {
+    const phase = view?.phase;
+    if (phase === "round-results" || phase === "final") {
+      const line = this.roundEndMessage(room, view?.roundOutcome);
+      if (line) room.activity.push(this.activity(line, "warning"));
+    }
+    if (phase === "final") {
       room.activity.push(this.activity("Match complete.", "warning"));
     }
+  }
+
+  private roundEndMessage(
+    room: Room,
+    outcome: EnginePlayerView["roundOutcome"],
+  ): string | undefined {
+    if (!outcome) return undefined;
+    const name = room.players.get(outcome.winnerId)?.name ?? "A player";
+    if (outcome.reason === "empty-hand") {
+      return `${name} went out with an empty hand.`;
+    }
+    if (outcome.reason === "all-scouted") {
+      return `Everyone Scouted ${name}’s Show. It stood unbeaten.`;
+    }
+    return `${name} takes the round — no Show left and no Scout chips.`;
   }
 
   private transferHostFromBot(room: Room): void {

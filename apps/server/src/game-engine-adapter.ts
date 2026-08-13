@@ -22,6 +22,7 @@ import type {
   GameAction,
   Play,
   RulesMode,
+  RoundOutcome,
   RoundScore,
 } from "@grandstand/shared";
 
@@ -49,6 +50,7 @@ export interface EnginePlayerView {
   players: Readonly<Record<string, EnginePlayerSummary>>;
   availableActions: AvailableActions;
   roundScores?: RoundScore[];
+  roundOutcome?: RoundOutcome;
   activity: Activity[];
 }
 
@@ -178,6 +180,17 @@ function buildView(game: GameState, playerId: string): EnginePlayerView {
           };
         })
       : undefined;
+  const ended =
+    game.round.status.kind === "ended" ? game.round.status.result : undefined;
+  const roundOutcome: RoundOutcome | undefined = ended
+    ? {
+        reason: ended.reason,
+        winnerId: ended.winnerId,
+        ...(ended.protectedPlayerId
+          ? { protectedPlayerId: ended.protectedPlayerId }
+          : {}),
+      }
+    : undefined;
   return {
     phase,
     round: game.roundNumber,
@@ -221,6 +234,7 @@ function buildView(game: GameState, playerId: string): EnginePlayerView {
     ),
     availableActions,
     ...(roundScores ? { roundScores } : {}),
+    ...(roundOutcome ? { roundOutcome } : {}),
     activity: [],
   };
 }

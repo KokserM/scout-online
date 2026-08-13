@@ -49,6 +49,7 @@ export const demoGame: GameState = {
   reconnectGraceMs: 90_000,
   activePlayerId: "you",
   startingPlayerId: "maya",
+  scoutTargetId: "maya",
   players: [
     {
       id: "you",

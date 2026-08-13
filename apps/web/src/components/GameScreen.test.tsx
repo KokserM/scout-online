@@ -657,4 +657,48 @@ describe("GameScreen experience polish", () => {
     expect(screen.getAllByText("Captured").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Round").length).toBeGreaterThan(0);
   });
+
+  it("shows a +1 Scout pill when the local scoutPoints count increases", () => {
+    const { rerender } = render(
+      <GameScreen state={demoGame} connected dispatch={vi.fn()} />,
+    );
+    expect(screen.queryByText("+1 SCOUT")).not.toBeInTheDocument();
+    rerender(
+      <GameScreen
+        state={{
+          ...demoGame,
+          players: demoGame.players.map((player) =>
+            player.id === "you"
+              ? { ...player, scoutPoints: player.scoutPoints + 1 }
+              : player,
+          ),
+        }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("+1 SCOUT")).toBeInTheDocument();
+  });
+
+  it("floats +1 on an opponent and captions the owner when you Scout their Show", () => {
+    const { container, rerender } = render(
+      <GameScreen state={demoGame} connected dispatch={vi.fn()} />,
+    );
+    rerender(
+      <GameScreen
+        state={{
+          ...demoGame,
+          players: demoGame.players.map((player) =>
+            player.id === "maya"
+              ? { ...player, scoutPoints: player.scoutPoints + 1 }
+              : player,
+          ),
+        }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Maya earns +1 Scout")).toBeInTheDocument();
+    expect(container.querySelector(".scout-award-float")).toHaveTextContent("+1");
+  });
 });

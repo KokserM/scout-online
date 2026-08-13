@@ -15,6 +15,7 @@ import {
   type ScoutKind,
 } from "./ScoutWorkflowDialog";
 import { useHandRangeSelection } from "./useHandRangeSelection";
+import { useScoutPointFeedback } from "./useScoutPointFeedback";
 
 interface GameScreenProps {
   state: GameState;
@@ -161,6 +162,7 @@ export function GameScreen({
   }, [resetKey, valueModeChoiceKey, state.rulesMode]);
   const chooseValueMode = (mode: ShowValueMode) =>
     setValueModeChoice({ key: valueModeChoiceKey, mode });
+  const scoutFeedback = useScoutPointFeedback(state);
 
   if (state.phase === "round-results" || state.phase === "final") {
     return (
@@ -302,12 +304,17 @@ export function GameScreen({
           <Eye /> Demo preview · controls are read-only
         </div>
       )}
-      <OpponentStrip state={state} />
+      <OpponentStrip
+        state={state}
+        scoutAwardIds={scoutFeedback.opponentAwardIds}
+        pulseKey={scoutFeedback.pulseKey}
+      />
       <GameTable
         state={state}
         logOpen={logOpen}
         onToggleLog={() => setLogOpen((open) => !open)}
         onCloseLog={() => setLogOpen(false)}
+        scoutFeedback={scoutFeedback}
       />
       <GameHandActionBar
         state={state}

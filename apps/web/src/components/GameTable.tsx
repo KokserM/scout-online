@@ -1,6 +1,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Crown, List, WifiOff } from "lucide-react";
 import type { GameState, Player } from "../protocol/types";
+import type { ScoutPointFeedback } from "./useScoutPointFeedback";
 import { GameCard } from "./GameCard";
 import { RulesModeBadge } from "./RulesModeBadge";
 
@@ -31,22 +32,37 @@ function PlayerBadges({
   );
 }
 
-function opponentLabel(player: Player, isActive: boolean) {
-  return `${player.name}, ${player.handCount} cards left${isActive ? ", playing" : ""}`;
+function opponentLabel(
+  player: Player,
+  isActive: boolean,
+  isShowOwner: boolean,
+) {
+  return `${player.name}, ${player.handCount} cards left${isActive ? ", playing" : ""}${isShowOwner ? ", Show" : ""}`;
 }
 
-export function OpponentStrip({ state }: { state: GameState }) {
+export function OpponentStrip({
+  state,
+  scoutAwardIds = [],
+  pulseKey = 0,
+}: {
+  state: GameState;
+  scoutAwardIds?: readonly string[];
+  pulseKey?: number;
+}) {
+  const reduceMotion = useReducedMotion();
   const players = state.players.filter((player) => player.id !== state.selfId);
   return (
     <div className="opponent-strip" aria-label="Opponents">
       {players.map((player) => {
         const isActive = player.id === state.activePlayerId;
+        const isShowOwner = player.id === state.scoutTargetId;
         const extra = Math.max(0, player.handCount - 6);
+        const awarded = scoutAwardIds.includes(player.id);
         return (
           <article
             className={`opponent ${isActive ? "is-active" : ""}`}
             {...(isActive ? { "aria-current": true as const } : {})}
-            aria-label={opponentLabel(player, isActive)}
+            aria-label={opponentLabel(player, isActive, isShowOwner)}
             key={player.id}
           >
             <span className="avatar" aria-hidden="true">
@@ -56,6 +72,7 @@ export function OpponentStrip({ state }: { state: GameState }) {
               <b>
                 {player.name}
                 {isActive && <span className="playing-marker">Playing</span>}
+                {isShowOwner && <span className="show-marker">Show</span>}
                 {player.id === state.startingPlayerId && (
                   <span className="starting-marker">
                     <Crown aria-hidden="true" /> starts
@@ -74,6 +91,19 @@ export function OpponentStrip({ state }: { state: GameState }) {
             <span className="hand-count-badge" aria-hidden="true">
               <strong>{player.handCount}</strong>
               <small>left</small>
+              <AnimatePresence>
+                {awarded && (
+                  <motion.span
+                    className="scout-award-float"
+                    key={`scout-${player.id}-${pulseKey}`}
+                    initial={reduceMotion ? false : { y: 10, opacity: 0, scale: 0.8 }}
+                    animate={{ y: -6, opacity: 1, scale: 1 }}
+                    exit={reduceMotion ? { opacity: 0 } : { y: -16, opacity: 0 }}
+                  >
+                    +1
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </span>
             <div className="mini-hand" aria-hidden="true">
               {Array.from({ length: Math.min(player.handCount, 6) }, (_, i) => (
@@ -93,6 +123,7 @@ interface GameTableProps {
   logOpen: boolean;
   onToggleLog: () => void;
   onCloseLog: () => void;
+  scoutFeedback?: ScoutPointFeedback;
 }
 
 export function GameTable({
@@ -100,6 +131,7 @@ export function GameTable({
   logOpen,
   onToggleLog,
   onCloseLog,
+  scoutFeedback,
 }: GameTableProps) {
   const reduceMotion = useReducedMotion();
   const self = state.players.find((player) => player.id === state.selfId);
@@ -110,6 +142,7 @@ export function GameTable({
   )?.name;
   const playedOpposite =
     state.rulesMode === "vosu" && currentPlay?.valueMode === "opposite";
+  const pulseKey = scoutFeedback?.pulseKey ?? 0;
 
   return (
     <section className="table-zone" aria-label="Table">
@@ -175,7 +208,50 @@ export function GameTable({
           <span>YOU</span>
           <strong>{self?.score ?? 0}</strong>
           <small>points</small>
+          {state.variant === "standard" && (
+            <small className="you-scout-line">{self?.scoutPoints ?? 0} Scout</small>
+          )}
         </div>
+        <AnimatePresence>
+          {scoutFeedback?.selfAward && (
+            <motion.p
+              className="scout-award-self"
+              key={`self-${pulseKey}`}
+              aria-live="polite"
+              initial={reduceMotion ? false : { scale: 0.72, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={reduceMotion ? { opacity: 0 } : { scale: 0.9, opacity: 0 }}
+            >
+              +1 SCOUT
+            </motion.p>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {scoutFeedback?.caption && (
+            <motion.p
+              className="scout-award-caption"
+              key={`caption-${pulseKey}`}
+              initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              {scoutFeedback.caption}
+            </motion.p>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {scoutFeedback?.chipToast && (
+            <motion.p
+              className="scout-chip-toast"
+              key={`chip-${pulseKey}`}
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {scoutFeedback.chipToast}
+            </motion.p>
+          )}
+        </AnimatePresence>
       </motion.div>
       <AnimatePresence>
         {logOpen && (

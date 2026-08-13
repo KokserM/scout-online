@@ -1,7 +1,32 @@
 import { Trophy } from "lucide-react";
-import type { ClientAction, GameState } from "../protocol/types";
+import type { ClientAction, GameState, RoundOutcome } from "../protocol/types";
 import { AccessibleDialog } from "./AccessibleDialog";
 import { RulesModeBadge } from "./RulesModeBadge";
+
+function playerName(state: GameState, playerId: string | undefined): string {
+  return state.players.find((player) => player.id === playerId)?.name ?? "A player";
+}
+
+function roundStory(state: GameState, outcome: RoundOutcome) {
+  const name = playerName(state, outcome.winnerId);
+  if (outcome.reason === "empty-hand") {
+    return {
+      headline: `${name} goes out.`,
+      subline:
+        "Empty hand ends the round. Remaining cards are a penalty except for that player’s captured/Scout score.",
+    };
+  }
+  if (outcome.reason === "all-scouted") {
+    return {
+      headline: `${name}’s Show stood.`,
+      subline: `Every other player Scouted it. ${name} skips the hand penalty.`,
+    };
+  }
+  return {
+    headline: `${name} takes the round.`,
+    subline: "The other player could not Show and had no Scout chips left.",
+  };
+}
 
 export function GameResults({
   state,
@@ -16,11 +41,20 @@ export function GameResults({
   const topScore = ranked[0]?.score;
   const winners = ranked.filter((player) => player.score === topScore);
   const isHost = state.selfId === state.hostId;
+  const story = state.roundOutcome
+    ? roundStory(state, state.roundOutcome)
+    : undefined;
   const title = final
     ? winners.length > 1
       ? `${winners.map((player) => player.name).join(" & ")} share the win.`
       : `${ranked[0]?.name} takes the grandstand.`
-    : "That’s the round.";
+    : (story?.headline ?? "That’s the round.");
+  const subline = final
+    ? story
+      ? `${story.headline} ${story.subline}`
+      : undefined
+    : story?.subline;
+  const roundLeadId = state.roundOutcome?.winnerId;
 
   return (
     <AccessibleDialog className="results-card" labelledBy="results-title">
@@ -30,6 +64,7 @@ export function GameResults({
         <RulesModeBadge mode={state.rulesMode} />
       </p>
       <h1 id="results-title">{title}</h1>
+      {subline && <p className="results-story">{subline}</p>}
       <p className="results-mode-copy">
         {state.rulesMode === "vosu"
           ? state.variant === "two-player"
@@ -42,11 +77,14 @@ export function GameResults({
           const score = state.roundScores?.find(
             (entry) => entry.playerId === player.id,
           );
+          const classes = [
+            player.score === topScore && final ? "is-winner" : "",
+            player.id === roundLeadId ? "is-round-lead" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
-            <li
-              className={player.score === topScore && final ? "is-winner" : ""}
-              key={player.id}
-            >
+            <li className={classes} key={player.id}>
               <span>{index + 1}</span>
               <b>{player.name}</b>
               <small>
@@ -55,9 +93,11 @@ export function GameResults({
                     <span>
                       Captured <b>+{score.capturedCards}</b>
                     </span>
-                    <span>
-                      Scout <b>+{score.scoutPoints}</b>
-                    </span>
+                    {state.variant !== "two-player" && (
+                      <span>
+                        Scout <b>+{score.scoutPoints}</b>
+                      </span>
+                    )}
                     {state.variant === "two-player" && (
                       <span>
                         Unused chips <b>+{score.unusedScoutChips}</b>
@@ -67,7 +107,7 @@ export function GameResults({
                       Hand{" "}
                       <b>
                         {score.handPenaltyExempt
-                          ? "exempt"
+                          ? "exempt (unbeaten Show)"
                           : `−${score.cardsRemaining}`}
                       </b>
                     </span>

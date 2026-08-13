@@ -181,6 +181,20 @@ export const roundScoreSchema = z
   })
   .strict();
 
+export const roundEndReasonSchema = z.enum([
+  "empty-hand",
+  "all-scouted",
+  "two-player-stuck",
+]);
+
+export const roundOutcomeSchema = z
+  .object({
+    reason: roundEndReasonSchema,
+    winnerId: entityIdSchema,
+    protectedPlayerId: entityIdSchema.optional(),
+  })
+  .strict();
+
 export const actionDisabledReasonSchema = z.enum([
   "round-ended",
   "orientations-pending",
@@ -271,6 +285,7 @@ export const playerStateSchema = z
     mustChooseOrientation: z.boolean(),
     availableActions: availableActionsSchema,
     roundScores: z.array(roundScoreSchema).optional(),
+    roundOutcome: roundOutcomeSchema.optional(),
     activity: z.array(activitySchema),
     canStart: z.boolean(),
     reconnectGraceMs: z.number().int().nonnegative(),
@@ -282,6 +297,8 @@ export type PublicPlayer = z.infer<typeof publicPlayerSchema>;
 export type Play = z.infer<typeof playSchema>;
 export type Activity = z.infer<typeof activitySchema>;
 export type RoundScore = z.infer<typeof roundScoreSchema>;
+export type RoundEndReason = z.infer<typeof roundEndReasonSchema>;
+export type RoundOutcome = z.infer<typeof roundOutcomeSchema>;
 export type ActionDisabledReason = z.infer<typeof actionDisabledReasonSchema>;
 export type ShowRangeHint = z.infer<typeof showRangeHintSchema>;
 export type AvailableActions = z.infer<typeof availableActionsSchema>;
