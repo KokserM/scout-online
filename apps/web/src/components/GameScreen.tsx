@@ -1,9 +1,10 @@
 import { AnimatePresence } from "framer-motion";
-import { Eye, WifiOff } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ClientAction, GameState, ShowValueMode } from "../protocol/types";
 import { AccessibleDialog } from "./AccessibleDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ConnectionBanner } from "./ConnectionBanner";
 import { GameHandActionBar } from "./GameHandActionBar";
 import { GameResults } from "./GameResults";
 import { GameTable, OpponentStrip } from "./GameTable";
@@ -294,10 +295,7 @@ export function GameScreen({
   return (
     <main className="game-shell">
       {!connected && !readOnly && (
-        <div className="connection-banner" role="status" aria-live="assertive">
-          <WifiOff /> Connection lost. Reconnecting… your seat is reserved for{" "}
-          {Math.ceil(state.reconnectGraceMs / 1000)} seconds.
-        </div>
+        <ConnectionBanner graceMs={state.reconnectGraceMs} variant="game" />
       )}
       {readOnly && (
         <div className="preview-banner" role="status">

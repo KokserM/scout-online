@@ -1,7 +1,8 @@
-import { CircleHelp, WifiOff } from "lucide-react";
+import { CircleHelp } from "lucide-react";
 import { MotionConfig } from "framer-motion";
 import { useState } from "react";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { ConnectionBanner } from "./components/ConnectionBanner";
 import { GameScreen } from "./components/GameScreen";
 import { HomeScreen } from "./components/HomeScreen";
 import { LobbyScreen } from "./components/LobbyScreen";
@@ -38,7 +39,9 @@ export default function App() {
           <button onClick={game.dismissError}>Dismiss</button>
         </div>
       )}
-      {!game.connected && game.screen === "lobby" && <div className="connection-banner" role="status"><WifiOff /> Connection lost. Reconnecting to your lobby…</div>}
+      {!game.connected && game.screen === "lobby" && game.state && (
+        <ConnectionBanner graceMs={game.state.reconnectGraceMs} variant="lobby" />
+      )}
 
       {(game.screen === "home" || game.screen === "join") && (
         <HomeScreen mode={game.screen} name={game.name} onMode={game.setScreen} onDispatch={game.dispatch} onDemo={game.enterDemo} />

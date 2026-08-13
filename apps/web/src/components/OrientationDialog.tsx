@@ -22,13 +22,19 @@ export function OrientationDialog({ state, previewFlipped, onFlip, onLock }: Ori
           <h1 id="orientation-title">Which way is up?</h1>
           <p>Rotate only the complete hand, then lock it for the round. After locking, each card’s large upright number is its active value for Show; the small OPPOSITE number beneath it is a reference, not another choice.</p>
           <p className="orientation-progress" aria-live="polite">{readyCount} of {state.players.length} players locked</p>
-          <motion.div
-            className={`orientation-hand ${previewFlipped ? "is-reversed" : ""}`}
+          <div
+            className="orientation-hand"
             aria-label={`Full hand orientation preview, ${state.hand.length} cards`}
-            animate={reduceMotion ? {} : { rotate: previewFlipped ? 1 : 0 }}
           >
-            {state.hand.map((card) => <GameCard card={card} flipped={previewFlipped} compact key={card.id} />)}
-          </motion.div>
+            <motion.div
+              className={`orientation-hand-inner ${previewFlipped ? "is-reversed" : ""}`}
+              animate={reduceMotion ? {} : { opacity: 1, y: previewFlipped ? 6 : 0 }}
+            >
+              {state.hand.map((card) => (
+                <GameCard card={card} flipped={previewFlipped} compact key={card.id} />
+              ))}
+            </motion.div>
+          </div>
           <button className="button button--secondary" onClick={onFlip}><RotateCw /> Flip the whole hand</button>
           <button className="button button--primary" onClick={onLock}>Lock this orientation</button>
         </>

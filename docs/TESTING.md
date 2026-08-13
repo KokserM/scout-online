@@ -41,7 +41,8 @@ npx pnpm@10.34.5 install
   turn authorization, forged cards/value modes, host-only lobby mode selection,
   post-start locking, Võsu rematch retention, and recipient-specific projections.
 - Browser tests cover landing, create/join/ready/start, orientation, Quick Play, a real
-  two-browser Show and repeat-turn Scout workflow, plus a three-browser Scout & Show
+  two-browser Show and repeat-turn Scout workflow, a desktop reconnect after
+  `setOffline`, plus a three-browser Scout & Show
   regression that verifies right-scrolled range selection at 320×568, 390×844,
   430×932, 667×375, and 1440×900. General responsive checks also cover 375×667,
   768×1024, and 1280×720. They use overflow, scroll-position, geometry, visibility,
@@ -115,7 +116,8 @@ the 8,000-game invariant run; it is not a mathematical proof of every possible g
     Out-of-turn/forged actions fail; projections exclude opponent hands and tokens;
     reconnect, session replacement, replay deduplication, leave takeover, host transfer,
     next round, final, and rematch preserve valid state (`app.test.ts`,
-    `game-engine-adapter.test.ts`, `real-socket.test.ts`).
+    `game-engine-adapter.test.ts`, `real-socket.test.ts`). The browser wakes the same
+    socket on visibility, bfcache restore, and `online` (`adapter.test.ts`).
 
 ## CI and verification scope
 

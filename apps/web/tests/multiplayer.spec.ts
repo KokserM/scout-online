@@ -317,6 +317,28 @@ test("Quick Play creates a live room with bots", async ({ page }) => {
   await expect(page.getByText(/^Marquee/)).toBeVisible();
 });
 
+test("reconnects into the same ongoing game after a network drop", async ({
+  page,
+  context,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop");
+  await page.goto("/");
+  await page.getByLabel("Your display name", { exact: true }).fill("Returner");
+  await page.getByRole("button", { name: /Quick play/i }).click();
+  await expect(page.getByRole("heading", { name: /Which way is up/i })).toBeVisible();
+  await page.getByRole("button", { name: /Lock this orientation/i }).click();
+  await expect(page.getByText("Your hand", { exact: true })).toBeVisible();
+  const handCount = await page.locator(".hand .card-button").count();
+  expect(handCount).toBeGreaterThan(0);
+
+  await context.setOffline(true);
+  await expect(page.getByText(/Connection lost/)).toBeVisible();
+  await context.setOffline(false);
+  await expect(page.getByText(/Connection lost/)).toBeHidden({ timeout: 15_000 });
+  await expect(page.getByText("Your hand", { exact: true })).toBeVisible();
+  await expect(page.locator(".hand .card-button")).toHaveCount(handCount);
+});
+
 test("a live round reaches responsive results", async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop");
   test.setTimeout(180_000);

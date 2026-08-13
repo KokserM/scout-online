@@ -46,7 +46,7 @@ export const demoGame: GameState = {
     },
   },
   canStart: false,
-  reconnectGraceMs: 30_000,
+  reconnectGraceMs: 90_000,
   activePlayerId: "you",
   startingPlayerId: "maya",
   players: [

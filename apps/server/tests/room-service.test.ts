@@ -322,6 +322,11 @@ describe("RoomService", () => {
     );
   });
 
+  it("defaults reconnect grace to 90 seconds", () => {
+    const service = new RoomService(new InMemoryRoomRepository(), fakeEngine);
+    expect(service.reconnectGraceMs).toBe(90_000);
+  });
+
   it("keeps disconnected players through grace and then expires them", () => {
     let now = 1_000;
     const service = new RoomService(new InMemoryRoomRepository(), fakeEngine, {

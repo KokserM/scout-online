@@ -72,7 +72,7 @@ export class RoomService {
     private readonly engine: GameEngine,
     options: RoomServiceOptions = {},
   ) {
-    this.reconnectGraceMs = options.reconnectGraceMs ?? 30_000;
+    this.reconnectGraceMs = options.reconnectGraceMs ?? 90_000;
     this.now = options.now ?? Date.now;
   }
 

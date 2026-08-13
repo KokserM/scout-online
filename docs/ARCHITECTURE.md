@@ -55,8 +55,9 @@ policy accepts authoritative opponent hands or deck order.
 
 Rooms live behind a repository interface and are in memory in v1. A reconnect token
 identifies a seat independently from a transient socket. Disconnect marks a seat offline
-and starts a grace period; reconnect replaces the old socket and restores only that
-seat's projection. This interface can later be implemented with Redis without changing
+and starts a 90-second grace period by default; reconnect replaces the old socket and restores only that
+seat's projection. The browser asks the existing socket to reconnect when the tab becomes
+visible again, after a bfcache restore, or when the network returns. This interface can later be implemented with Redis without changing
 the protocol or game engine.
 
 An active-game leave immediately retires the human capability and converts the seat to

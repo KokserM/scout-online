@@ -73,6 +73,8 @@ test("live game remains operable at every acceptance viewport", async ({
       await expect(page.getByRole("button", { name: /Flip the whole hand/i })).toBeVisible();
       await expectMinimumTarget(page.getByRole("button", { name: /Lock this orientation/i }));
       await page.getByRole("button", { name: /Flip the whole hand/i }).click();
+      const scrollTransform = await fullHand.evaluate((element) => getComputedStyle(element).transform);
+      expect(scrollTransform === "none" || scrollTransform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);
       await page.getByRole("button", { name: /Lock this orientation/i }).click();
 
       await expect(page.getByText("Your hand", { exact: true })).toBeVisible();

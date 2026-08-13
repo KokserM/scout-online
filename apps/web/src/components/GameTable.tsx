@@ -15,7 +15,7 @@ function PlayerBadges({
 }) {
   return (
     <small>
-      {player.handCount} cards · {player.score} pts
+      {player.score} pts
       {variant === "two-player"
         ? ` · ${player.scoutChips} chips`
         : ` · ${player.scoutPoints} Scout`}
@@ -31,41 +31,59 @@ function PlayerBadges({
   );
 }
 
+function opponentLabel(player: Player, isActive: boolean) {
+  return `${player.name}, ${player.handCount} cards left${isActive ? ", playing" : ""}`;
+}
+
 export function OpponentStrip({ state }: { state: GameState }) {
   const players = state.players.filter((player) => player.id !== state.selfId);
   return (
     <div className="opponent-strip" aria-label="Opponents">
-      {players.map((player) => (
-        <article
-          className={`opponent ${player.id === state.activePlayerId ? "is-active" : ""}`}
-          key={player.id}
-        >
-          <span className="avatar">{player.name[0]}</span>
-          <span className="opponent-copy">
-            <b>
-              {player.name}
-              {player.id === state.startingPlayerId && (
-                <span className="starting-marker">
-                  <Crown aria-hidden="true" /> starts
-                </span>
-              )}
-            </b>
-            <PlayerBadges
-              player={player}
-              variant={state.variant}
-              rulesMode={state.rulesMode}
-            />
-          </span>
-          {!player.connected && (
-            <WifiOff aria-label={`${player.name} disconnected`} />
-          )}
-          <div className="mini-hand" aria-hidden="true">
-            {Array.from({ length: Math.min(player.handCount, 6) }, (_, i) => (
-              <i key={i} />
-            ))}
-          </div>
-        </article>
-      ))}
+      {players.map((player) => {
+        const isActive = player.id === state.activePlayerId;
+        const extra = Math.max(0, player.handCount - 6);
+        return (
+          <article
+            className={`opponent ${isActive ? "is-active" : ""}`}
+            {...(isActive ? { "aria-current": true as const } : {})}
+            aria-label={opponentLabel(player, isActive)}
+            key={player.id}
+          >
+            <span className="avatar" aria-hidden="true">
+              {player.name[0]}
+            </span>
+            <span className="opponent-copy">
+              <b>
+                {player.name}
+                {isActive && <span className="playing-marker">Playing</span>}
+                {player.id === state.startingPlayerId && (
+                  <span className="starting-marker">
+                    <Crown aria-hidden="true" /> starts
+                  </span>
+                )}
+              </b>
+              <PlayerBadges
+                player={player}
+                variant={state.variant}
+                rulesMode={state.rulesMode}
+              />
+            </span>
+            {!player.connected && (
+              <WifiOff aria-label={`${player.name} disconnected`} />
+            )}
+            <span className="hand-count-badge" aria-hidden="true">
+              <strong>{player.handCount}</strong>
+              <small>left</small>
+            </span>
+            <div className="mini-hand" aria-hidden="true">
+              {Array.from({ length: Math.min(player.handCount, 6) }, (_, i) => (
+                <i key={i} />
+              ))}
+              {extra > 0 && <span className="mini-hand-more">+{extra}</span>}
+            </div>
+          </article>
+        );
+      })}
     </div>
   );
 }
@@ -101,9 +119,7 @@ export function GameTable({
           <RulesModeBadge mode={state.rulesMode} />
         </span>
         <b aria-live="polite">
-          {isTurn
-            ? "Your move"
-            : `${activeName ?? "Another player"} is thinking`}
+          {isTurn ? "Your move" : `${activeName ?? "Another player"}'s move`}
         </b>
         <button
           className="icon-button"
@@ -115,7 +131,13 @@ export function GameTable({
           <List />
         </button>
       </header>
-      <motion.div className="felt-table" layout={!reduceMotion}>
+      <motion.div
+        className={`felt-table ${isTurn ? "is-your-turn" : "is-waiting"}`}
+        layout={!reduceMotion}
+      >
+        <p className="turn-pill" aria-hidden="true">
+          {isTurn ? "YOUR MOVE" : (activeName ?? "Waiting")}
+        </p>
         <AnimatePresence mode="wait">
           {currentPlay ? (
             <motion.div

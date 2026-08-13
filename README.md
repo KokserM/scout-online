@@ -92,9 +92,11 @@ immediately.
 ## Reconnecting
 
 The server issues an opaque reconnect token per human seat. The browser stores it
-locally; a replacement socket restores the same seat and private hand. Other players see
-connection status but never hidden state. Rooms are in memory for v1 behind a repository
-interface, so restarting the server clears active rooms.
+locally; a replacement socket restores the same seat and private hand. Returning to the
+game tab, restoring from bfcache, or coming back online nudges that same socket awake.
+A seat stays reserved for 90 seconds after a drop. Other players see connection status
+but never hidden state. Rooms are in memory for v1 behind a repository interface, so
+restarting the server clears active rooms.
 
 ## Production
 

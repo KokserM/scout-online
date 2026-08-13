@@ -548,9 +548,11 @@ describe("GameScreen experience polish", () => {
       /small OPPOSITE number beneath it is a reference, not another choice/i,
     );
     expect(
-      screen.getByLabelText(
-        `Full hand orientation preview, ${demoGame.hand.length} cards`,
-      ).children,
+      screen
+        .getByLabelText(
+          `Full hand orientation preview, ${demoGame.hand.length} cards`,
+        )
+        .querySelectorAll(".card-wrap"),
     ).toHaveLength(demoGame.hand.length);
     expect(
       screen.getByText(`2 of ${demoGame.players.length} players locked`),

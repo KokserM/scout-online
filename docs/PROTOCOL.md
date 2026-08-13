@@ -51,7 +51,9 @@ The browser sends one queued command at a time and removes it only after a match
 - no other player's card identities, values, order, or orientation.
 
 Connection-status events are public. Reconnect restores a fresh state projection.
-Disconnect retains the seat during `reconnectGraceMs`. Expiry forfeits the reconnect
+Disconnect retains the seat during `reconnectGraceMs` (90 seconds by default). The
+browser also nudges Socket.IO awake on `visibilitychange`, bfcache `pageshow`, and
+`online` so a returning tab resumes the same seat. Expiry forfeits the reconnect
 capability, converts an active seat to a bot, and causes future token use to receive
 `SEAT_LOST` with instructions to join a new room. Repeating an acknowledged leave with
 the same token and action ID remains idempotent.

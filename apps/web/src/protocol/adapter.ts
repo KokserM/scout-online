@@ -13,14 +13,38 @@ export interface ProtocolEvents {
   connection: (connected: boolean) => void;
 }
 
+export type CreateSocket = (
+  uri: string,
+  opts?: Parameters<typeof io>[1],
+) => Socket;
+
 export interface ClientProtocol {
   connect(token?: string): void;
   disconnect(): void;
+  ensureConnected(): void;
   dispatch(action: ClientAction): void;
   on<K extends keyof ProtocolEvents>(
     event: K,
     listener: ProtocolEvents[K],
   ): () => void;
+}
+
+export function bindConnectionLifecycle(ensureConnected: () => void): () => void {
+  const onVisible = () => {
+    if (document.visibilityState === "visible") ensureConnected();
+  };
+  const onPageShow = (event: Event) => {
+    if ((event as PageTransitionEvent).persisted) ensureConnected();
+  };
+  const onOnline = () => ensureConnected();
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("pageshow", onPageShow);
+  window.addEventListener("online", onOnline);
+  return () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("pageshow", onPageShow);
+    window.removeEventListener("online", onOnline);
+  };
 }
 
 /**
@@ -36,9 +60,11 @@ export class SocketProtocol implements ClientProtocol {
     Set<(payload: unknown) => void>
   >();
 
+  constructor(private readonly createSocket: CreateSocket = io) {}
+
   connect(token?: string) {
     if (this.socket) return;
-    this.socket = io(import.meta.env.VITE_SOCKET_URL || "/", {
+    this.socket = this.createSocket(import.meta.env.VITE_SOCKET_URL || "/", {
       ...(token ? { auth: { sessionToken: token } } : {}),
       reconnectionDelayMax: 5_000,
     });
@@ -120,6 +146,10 @@ export class SocketProtocol implements ClientProtocol {
   disconnect() {
     this.socket?.disconnect();
     this.socket = undefined;
+  }
+
+  ensureConnected() {
+    if (this.socket && !this.socket.connected) this.socket.connect();
   }
 
   dispatch(action: ClientAction) {

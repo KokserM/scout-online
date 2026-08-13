@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SocketProtocol } from "../protocol/adapter";
+import { bindConnectionLifecycle, SocketProtocol } from "../protocol/adapter";
 import { demoGame } from "../protocol/demo";
 import type { ClientAction, GameState, Screen, ServerError } from "../protocol/types";
 
@@ -38,10 +38,12 @@ export function useGrandstand() {
       }
     });
     protocol.connect(localStorage.getItem(SESSION_KEY) || undefined);
+    const offLifecycle = bindConnectionLifecycle(() => protocol.ensureConnected());
     return () => {
       offState();
       offConnection();
       offError();
+      offLifecycle();
       protocol.disconnect();
     };
   }, [protocol]);
