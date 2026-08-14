@@ -1,26 +1,38 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Crown, List, WifiOff } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { GameState, Player } from "../protocol/types";
-import type { ScoutPointFeedback } from "./useScoutPointFeedback";
 import { GameCard } from "./GameCard";
 import { RulesModeBadge } from "./RulesModeBadge";
+import { seatOffsetFromTable, type Point } from "./seatAnchors";
+import type { TableMotion } from "./useTableMotion";
+
+function livePoints(player: Player, variant: GameState["variant"]) {
+  return variant === "standard"
+    ? player.score + player.scoutPoints
+    : player.score;
+}
 
 function PlayerBadges({
   player,
   variant,
   rulesMode,
+  pulsing,
 }: {
   player: Player;
   variant: GameState["variant"];
   rulesMode: GameState["rulesMode"];
+  pulsing?: boolean;
 }) {
   return (
     <small>
-      {player.score} pts
+      <span className={`live-points ${pulsing ? "is-points-pulse" : ""}`}>
+        {livePoints(player, variant)} pts
+      </span>
       {variant === "two-player"
         ? ` · ${player.scoutChips} chips`
         : ` · ${player.scoutPoints} Scout`}
-      {variant === "standard" &&
+      {(variant === "standard" || rulesMode === "vosu") &&
         ` · Scout & Show ${
           rulesMode === "vosu"
             ? "unlimited"
@@ -42,14 +54,11 @@ function opponentLabel(
 
 export function OpponentStrip({
   state,
-  scoutAwardIds = [],
-  pulseKey = 0,
+  pulsingPlayerId,
 }: {
   state: GameState;
-  scoutAwardIds?: readonly string[];
-  pulseKey?: number;
+  pulsingPlayerId?: string;
 }) {
-  const reduceMotion = useReducedMotion();
   const players = state.players.filter((player) => player.id !== state.selfId);
   return (
     <div className="opponent-strip" aria-label="Opponents">
@@ -57,10 +66,10 @@ export function OpponentStrip({
         const isActive = player.id === state.activePlayerId;
         const isShowOwner = player.id === state.scoutTargetId;
         const extra = Math.max(0, player.handCount - 6);
-        const awarded = scoutAwardIds.includes(player.id);
         return (
           <article
             className={`opponent ${isActive ? "is-active" : ""}`}
+            data-seat={player.id}
             {...(isActive ? { "aria-current": true as const } : {})}
             aria-label={opponentLabel(player, isActive, isShowOwner)}
             key={player.id}
@@ -83,6 +92,7 @@ export function OpponentStrip({
                 player={player}
                 variant={state.variant}
                 rulesMode={state.rulesMode}
+                pulsing={pulsingPlayerId === player.id}
               />
             </span>
             {!player.connected && (
@@ -91,19 +101,6 @@ export function OpponentStrip({
             <span className="hand-count-badge" aria-hidden="true">
               <strong>{player.handCount}</strong>
               <small>left</small>
-              <AnimatePresence>
-                {awarded && (
-                  <motion.span
-                    className="scout-award-float"
-                    key={`scout-${player.id}-${pulseKey}`}
-                    initial={reduceMotion ? false : { y: 10, opacity: 0, scale: 0.8 }}
-                    animate={{ y: -6, opacity: 1, scale: 1 }}
-                    exit={reduceMotion ? { opacity: 0 } : { y: -16, opacity: 0 }}
-                  >
-                    +1
-                  </motion.span>
-                )}
-              </AnimatePresence>
             </span>
             <div className="mini-hand" aria-hidden="true">
               {Array.from({ length: Math.min(player.handCount, 6) }, (_, i) => (
@@ -123,7 +120,7 @@ interface GameTableProps {
   logOpen: boolean;
   onToggleLog: () => void;
   onCloseLog: () => void;
-  scoutFeedback?: ScoutPointFeedback;
+  tableMotion?: TableMotion;
 }
 
 export function GameTable({
@@ -131,9 +128,12 @@ export function GameTable({
   logOpen,
   onToggleLog,
   onCloseLog,
-  scoutFeedback,
+  tableMotion,
 }: GameTableProps) {
   const reduceMotion = useReducedMotion();
+  const feltRef = useRef<HTMLDivElement>(null);
+  const [dealFrom, setDealFrom] = useState<Point>({ x: 0, y: -80 });
+  const [peelTo, setPeelTo] = useState<Point>({ x: 0, y: 40 });
   const self = state.players.find((player) => player.id === state.selfId);
   const currentPlay = state.table.at(-1);
   const isTurn = state.activePlayerId === state.selfId;
@@ -142,7 +142,24 @@ export function GameTable({
   )?.name;
   const playedOpposite =
     state.rulesMode === "vosu" && currentPlay?.valueMode === "opposite";
-  const pulseKey = scoutFeedback?.pulseKey ?? 0;
+  const deal = tableMotion?.showDeal;
+  const peel = tableMotion?.scoutPeel;
+  const awardStatus =
+    tableMotion?.scoutAward &&
+    (tableMotion.caption ??
+      (tableMotion.scoutAward.ownerId === state.selfId
+        ? "You gained +1 Scout"
+        : `${state.players.find((player) => player.id === tableMotion.scoutAward?.ownerId)?.name ?? "A player"} gained +1 Scout`));
+
+  useLayoutEffect(() => {
+    const root = feltRef.current?.closest(".game-shell") ?? null;
+    if (deal) {
+      setDealFrom(seatOffsetFromTable(root, deal.actorId, state.selfId));
+    }
+    if (peel) {
+      setPeelTo(seatOffsetFromTable(root, peel.scoutId, state.selfId));
+    }
+  }, [deal, peel, state.selfId]);
 
   return (
     <section className="table-zone" aria-label="Table">
@@ -165,37 +182,102 @@ export function GameTable({
         </button>
       </header>
       <motion.div
+        ref={feltRef}
         className={`felt-table ${isTurn ? "is-your-turn" : "is-waiting"}`}
+        data-table-felt=""
         layout={!reduceMotion}
       >
         <p className="turn-pill" aria-hidden="true">
           {isTurn ? "YOUR MOVE" : (activeName ?? "Waiting")}
         </p>
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           {currentPlay ? (
             <motion.div
               className="current-play"
               key={currentPlay.id}
-              initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={reduceMotion ? {} : { opacity: 0, y: -16 }}
+              initial={reduceMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={reduceMotion ? {} : { opacity: 0, y: 24 }}
+              transition={{ duration: 0.18 }}
             >
-              <p className="table-caption">
+              <motion.p
+                className="table-caption"
+                initial={reduceMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: reduceMotion ? 0 : 0.07 }}
+              >
                 {state.players.find((p) => p.id === currentPlay.playerId)?.name}{" "}
                 showed · {currentPlay.valueMode.toUpperCase()}
-              </p>
-              <div className="table-play">
-                {currentPlay.cards.map((card) => (
-                  <GameCard
-                    card={card}
-                    compact
-                    {...(playedOpposite
-                      ? { effectiveValueMode: "opposite" as const }
-                      : {})}
-                    playedOpposite={playedOpposite}
+              </motion.p>
+              <div className="table-play" data-table-play="">
+                {currentPlay.cards.map((card, index) => (
+                  <motion.div
+                    className="card-deal"
+                    data-table-end={
+                      index === 0
+                        ? "start"
+                        : index === currentPlay.cards.length - 1
+                          ? "end"
+                          : undefined
+                    }
                     key={card.id}
-                  />
+                    initial={
+                      reduceMotion || !deal
+                        ? false
+                        : {
+                            x: dealFrom.x,
+                            y: dealFrom.y,
+                            rotate: dealFrom.y < 0 ? -10 : 10,
+                            opacity: 0,
+                            scale: 0.92,
+                          }
+                    }
+                    animate={{ x: 0, y: 0, rotate: 0, opacity: 1, scale: 1 }}
+                    transition={
+                      reduceMotion || !deal
+                        ? { duration: 0 }
+                        : {
+                            delay: index * 0.07,
+                            type: "spring",
+                            stiffness: 380,
+                            damping: 28,
+                          }
+                    }
+                  >
+                    <GameCard
+                      card={card}
+                      compact
+                      layoutAnimation={false}
+                      {...(playedOpposite
+                        ? { effectiveValueMode: "opposite" as const }
+                        : {})}
+                      playedOpposite={playedOpposite}
+                    />
+                  </motion.div>
                 ))}
+                <AnimatePresence>
+                  {peel && !reduceMotion && (
+                    <motion.div
+                      className={`card-peel is-${peel.fromEnd}`}
+                      key={`peel-${peel.removedCardId}`}
+                      initial={{ opacity: 1, x: 0, y: 0, rotate: 0 }}
+                      animate={{
+                        opacity: 0,
+                        x: peelTo.x,
+                        y: peelTo.y,
+                        rotate: 14,
+                        scale: 0.86,
+                      }}
+                      transition={{ duration: 0.35, ease: "easeIn" }}
+                    >
+                      <GameCard
+                        card={peel.card}
+                        compact
+                        layoutAnimation={false}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           ) : (
@@ -204,51 +286,54 @@ export function GameTable({
             </motion.p>
           )}
         </AnimatePresence>
-        <div className="table-score">
+        <div
+          className="table-score"
+          data-seat={state.selfId}
+        >
           <span>YOU</span>
-          <strong>{self?.score ?? 0}</strong>
+          <strong
+            className={`live-points ${tableMotion?.pulsingPlayerId === state.selfId ? "is-points-pulse" : ""}`}
+          >
+            {self ? livePoints(self, state.variant) : 0}
+          </strong>
           <small>points</small>
           {state.variant === "standard" && (
             <small className="you-scout-line">{self?.scoutPoints ?? 0} Scout</small>
           )}
         </div>
+        <span
+          className="self-seat-anchor"
+          data-seat={state.selfId}
+          aria-hidden="true"
+        />
+        {awardStatus && (
+          <p className="scout-award-status" aria-live="polite">
+            {awardStatus}
+          </p>
+        )}
         <AnimatePresence>
-          {scoutFeedback?.selfAward && (
-            <motion.p
-              className="scout-award-self"
-              key={`self-${pulseKey}`}
-              aria-live="polite"
-              initial={reduceMotion ? false : { scale: 0.72, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={reduceMotion ? { opacity: 0 } : { scale: 0.9, opacity: 0 }}
-            >
-              +1 SCOUT
-            </motion.p>
-          )}
-        </AnimatePresence>
-        <AnimatePresence>
-          {scoutFeedback?.caption && (
+          {tableMotion?.caption && (
             <motion.p
               className="scout-award-caption"
-              key={`caption-${pulseKey}`}
+              key={`caption-${tableMotion.pulseKey}`}
               initial={reduceMotion ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
             >
-              {scoutFeedback.caption}
+              {tableMotion.caption}
             </motion.p>
           )}
         </AnimatePresence>
         <AnimatePresence>
-          {scoutFeedback?.chipToast && (
+          {tableMotion?.chipToast && (
             <motion.p
               className="scout-chip-toast"
-              key={`chip-${pulseKey}`}
+              key={`chip-${tableMotion.pulseKey}`}
               initial={reduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              {scoutFeedback.chipToast}
+              {tableMotion.chipToast}
             </motion.p>
           )}
         </AnimatePresence>

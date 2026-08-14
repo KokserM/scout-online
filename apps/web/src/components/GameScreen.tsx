@@ -1,6 +1,6 @@
 import { AnimatePresence } from "framer-motion";
 import { Eye } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClientAction, GameState, ShowValueMode } from "../protocol/types";
 import { AccessibleDialog } from "./AccessibleDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -14,8 +14,9 @@ import {
   type ScoutFlow,
   type ScoutKind,
 } from "./ScoutWorkflowDialog";
+import { FlyingScoutToken } from "./FlyingScoutToken";
 import { useHandRangeSelection } from "./useHandRangeSelection";
-import { useScoutPointFeedback } from "./useScoutPointFeedback";
+import { useTableMotion } from "./useTableMotion";
 
 interface GameScreenProps {
   state: GameState;
@@ -162,7 +163,8 @@ export function GameScreen({
   }, [resetKey, valueModeChoiceKey, state.rulesMode]);
   const chooseValueMode = (mode: ShowValueMode) =>
     setValueModeChoice({ key: valueModeChoiceKey, mode });
-  const scoutFeedback = useScoutPointFeedback(state);
+  const tableMotion = useTableMotion(state);
+  const shellRef = useRef<HTMLElement>(null);
 
   if (state.phase === "round-results" || state.phase === "final") {
     return (
@@ -295,7 +297,7 @@ export function GameScreen({
   };
 
   return (
-    <main className="game-shell">
+    <main className="game-shell" ref={shellRef}>
       {!connected && !readOnly && (
         <ConnectionBanner graceMs={state.reconnectGraceMs} variant="game" />
       )}
@@ -306,16 +308,30 @@ export function GameScreen({
       )}
       <OpponentStrip
         state={state}
-        scoutAwardIds={scoutFeedback.opponentAwardIds}
-        pulseKey={scoutFeedback.pulseKey}
+        {...(tableMotion.pulsingPlayerId
+          ? { pulsingPlayerId: tableMotion.pulsingPlayerId }
+          : {})}
       />
       <GameTable
         state={state}
         logOpen={logOpen}
         onToggleLog={() => setLogOpen((open) => !open)}
         onCloseLog={() => setLogOpen(false)}
-        scoutFeedback={scoutFeedback}
+        tableMotion={tableMotion}
       />
+      <div className="motion-overlay" aria-hidden="true">
+        {tableMotion.scoutAward && (
+          <FlyingScoutToken
+            ownerId={tableMotion.scoutAward.ownerId}
+            selfId={state.selfId}
+            shell={shellRef.current}
+            {...(tableMotion.scoutPeel
+              ? { fromEnd: tableMotion.scoutPeel.fromEnd }
+              : {})}
+            pulseKey={tableMotion.pulseKey}
+          />
+        )}
+      </div>
       <GameHandActionBar
         state={state}
         {...(self ? { self } : {})}
@@ -406,11 +422,11 @@ export function GameScreen({
             <p>
               {state.variant === "two-player"
                 ? state.rulesMode === "vosu"
-                  ? `Scout or Scout & Show spends one of your ${self?.scoutChips ?? 0} remaining chips. Scout lets you act again; a successful Scout & Show passes the turn.`
-                  : `Scout spends one of your ${self?.scoutChips ?? 0} remaining chips and lets you act again.`
+                  ? `Scout or Scout & Show spends one of your ${self?.scoutChips ?? 0} remaining chips and does not give the opponent a Scout point. Scout lets you act again; a successful Scout & Show passes the turn.`
+                  : `Scout spends one of your ${self?.scoutChips ?? 0} remaining chips and lets you act again. There is no Scout & Show.`
                 : state.rulesMode === "vosu"
-                  ? "Scout takes an end card. Scout & Show is unlimited."
-                  : `Scout takes an end card. Scout & Show is ${self?.scoutAndShowAvailable ? "still available" : "already used"} this round.`}
+                  ? "Scout takes an end card, gives that Show’s owner +1 Scout, and passes. Or Scout & Show in one move — that action is unlimited."
+                  : `Scout takes an end card and gives that Show’s owner +1 Scout. Scout & Show is ${self?.scoutAndShowAvailable ? "still available" : "already used"} this round.`}
             </p>
             <p>
               Select adjacent cards in your fixed hand using only each card’s

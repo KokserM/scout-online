@@ -132,10 +132,12 @@ export function GameHandActionBar({
           )}
           <small className="mode-status">
             {state.variant === "two-player"
-              ? `Scout and Scout & Show spend a chip · ${self?.scoutChips ?? 0} remaining`
+              ? state.rulesMode === "vosu"
+                ? `Scout or Scout & Show spends a chip · ${self?.scoutChips ?? 0} left · no Scout point`
+                : `Scout spends a chip · ${self?.scoutChips ?? 0} remaining`
               : state.rulesMode === "vosu"
-                ? "Scout & Show unlimited"
-                : `Scout & Show ${self?.scoutAndShowAvailable ? "ready" : "used"} this round`}
+                ? "Scout gives the Show owner +1 and passes · Scout & Show unlimited"
+                : `Scout gives the Show owner +1 · Scout & Show ${self?.scoutAndShowAvailable ? "ready" : "used"} this round`}
           </small>
         </div>
         <div className="action-buttons">
@@ -155,7 +157,7 @@ export function GameHandActionBar({
             <ArrowDownToLine /> Scout{" "}
             {state.variant === "two-player" ? `(${self?.scoutChips ?? 0})` : ""}
           </button>
-          {state.variant === "standard" && (
+          {(state.variant === "standard" || state.rulesMode === "vosu") && (
             <button
               className="button button--secondary"
               title={disabledReason(

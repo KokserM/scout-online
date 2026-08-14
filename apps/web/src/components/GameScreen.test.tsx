@@ -658,8 +658,8 @@ describe("GameScreen experience polish", () => {
     expect(screen.getAllByText("Round").length).toBeGreaterThan(0);
   });
 
-  it("shows a +1 Scout pill when the local scoutPoints count increases", () => {
-    const { rerender } = render(
+  it("flies +1 SCOUT to the self seat when the local scoutPoints count increases", () => {
+    const { container, rerender } = render(
       <GameScreen state={demoGame} connected dispatch={vi.fn()} />,
     );
     expect(screen.queryByText("+1 SCOUT")).not.toBeInTheDocument();
@@ -677,10 +677,12 @@ describe("GameScreen experience polish", () => {
         dispatch={vi.fn()}
       />,
     );
-    expect(screen.getByText("+1 SCOUT")).toBeInTheDocument();
+    const token = container.querySelector(".scout-token-fly");
+    expect(token).toHaveTextContent("+1 SCOUT");
+    expect(token).toHaveAttribute("data-owner", "you");
   });
 
-  it("floats +1 on an opponent and captions the owner when you Scout their Show", () => {
+  it("flies +1 SCOUT to the owner seat and captions when you Scout their Show", () => {
     const { container, rerender } = render(
       <GameScreen state={demoGame} connected dispatch={vi.fn()} />,
     );
@@ -698,7 +700,142 @@ describe("GameScreen experience polish", () => {
         dispatch={vi.fn()}
       />,
     );
-    expect(screen.getByText("Maya earns +1 Scout")).toBeInTheDocument();
-    expect(container.querySelector(".scout-award-float")).toHaveTextContent("+1");
+    expect(screen.getAllByText("Maya earns +1 Scout").length).toBeGreaterThan(0);
+    const token = container.querySelector(".scout-token-fly");
+    expect(token).toHaveTextContent("+1 SCOUT");
+    expect(token).toHaveAttribute("data-owner", "maya");
+    expect(
+      screen.getByRole("article", { name: /Maya, 5 cards left, Show/ }),
+    ).toHaveTextContent("18 pts");
+  });
+
+  it("does not spawn a Scout token when a two-player chip is spent", () => {
+    const twoPlayer = {
+      ...demoGame,
+      variant: "two-player" as const,
+      players: demoGame.players.slice(0, 2).map((player) => ({
+        ...player,
+        scoutChips: 3,
+        scoutPoints: 0,
+      })),
+    };
+    const { container, rerender } = render(
+      <GameScreen state={twoPlayer} connected dispatch={vi.fn()} />,
+    );
+    rerender(
+      <GameScreen
+        state={{
+          ...twoPlayer,
+          players: twoPlayer.players.map((player) =>
+            player.id === "you" ? { ...player, scoutChips: 2 } : player,
+          ),
+        }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(container.querySelector(".scout-token-fly")).not.toBeInTheDocument();
+    expect(screen.queryByText("+1 SCOUT")).not.toBeInTheDocument();
+    expect(screen.getByText("You spent a Scout chip.")).toBeInTheDocument();
+  });
+
+  it("keeps the +1 SCOUT text when motion is reduced", () => {
+    const matchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: query.includes("prefers-reduced-motion"),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      }),
+    });
+    const { container, rerender } = render(
+      <GameScreen state={demoGame} connected dispatch={vi.fn()} />,
+    );
+    rerender(
+      <GameScreen
+        state={{
+          ...demoGame,
+          players: demoGame.players.map((player) =>
+            player.id === "maya"
+              ? { ...player, scoutPoints: player.scoutPoints + 1 }
+              : player,
+          ),
+        }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(container.querySelector(".scout-token-fly")).toHaveTextContent("+1 SCOUT");
+    window.matchMedia = matchMedia;
+  });
+
+  it("counts Võsu Scout awards on the Show owner and keeps Scout & Show available", () => {
+    const vosu = {
+      ...demoGame,
+      rulesMode: "vosu" as const,
+    };
+    const { rerender } = render(
+      <GameScreen state={vosu} connected dispatch={vi.fn()} />,
+    );
+    expect(screen.getByText("Scout gives the Show owner +1 and passes · Scout & Show unlimited")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Scout & Show/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("article", { name: /Maya, 5 cards left, Show/ }),
+    ).toHaveTextContent("17 pts");
+
+    rerender(
+      <GameScreen
+        state={{
+          ...vosu,
+          players: vosu.players.map((player) =>
+            player.id === "maya"
+              ? { ...player, scoutPoints: player.scoutPoints + 1 }
+              : player,
+          ),
+        }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("article", { name: /Maya, 5 cards left, Show/ }),
+    ).toHaveTextContent("18 pts");
+    expect(screen.getAllByText("Maya earns +1 Scout").length).toBeGreaterThan(0);
+  });
+
+  it("offers Scout & Show in two-player Võsu but not in official two-player", () => {
+    const twoPlayer = {
+      ...demoGame,
+      variant: "two-player" as const,
+      players: demoGame.players.slice(0, 2).map((player) => ({
+        ...player,
+        scoutChips: 3,
+        scoutPoints: 0,
+      })),
+    };
+    const { rerender } = render(
+      <GameScreen
+        state={{ ...twoPlayer, rulesMode: "official" }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Scout & Show/ })).not.toBeInTheDocument();
+
+    rerender(
+      <GameScreen
+        state={{ ...twoPlayer, rulesMode: "vosu" }}
+        connected
+        dispatch={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Scout & Show/ })).toBeInTheDocument();
   });
 });

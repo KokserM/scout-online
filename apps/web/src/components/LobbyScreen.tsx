@@ -155,8 +155,9 @@ export function LobbyScreen({ state, connected, dispatch }: LobbyScreenProps) {
             per round.
           </p>
           <p>
-            <strong>Võsu:</strong> choose ACTIVE or OPPOSITE for the whole Show;
-            Scout &amp; Show is unlimited in 3–5 player games.
+            <strong>Võsu:</strong> choose ACTIVE or OPPOSITE for the whole Show.
+            In 3–5 player games Scout still gives the Show owner +1 and passes;
+            Scout &amp; Show is unlimited.
           </p>
           <p>
             In 2-player games, Scout and Scout &amp; Show both spend a Scout

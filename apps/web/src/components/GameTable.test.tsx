@@ -125,31 +125,101 @@ describe("GameTable", () => {
     expect(theo.querySelector(".show-marker")).not.toBeInTheDocument();
   });
 
-  it("pulses a +1 Scout award on the local score and opponent badge", () => {
+  it("renders one table card per Show card and exposes seat anchors", () => {
+    const play = demoGame.table.at(-1)!;
     const { container } = render(
       <>
-        <OpponentStrip
-          state={demoGame}
-          scoutAwardIds={["maya"]}
-          pulseKey={1}
-        />
+        <OpponentStrip state={demoGame} />
         <GameTable
           state={demoGame}
           logOpen={false}
           onToggleLog={vi.fn()}
           onCloseLog={vi.fn()}
-          scoutFeedback={{
-            selfAward: true,
-            opponentAwardIds: ["maya"],
+        />
+      </>,
+    );
+    expect(container.querySelectorAll(".card-deal")).toHaveLength(play.cards.length);
+    expect(container.querySelector("[data-table-play]")).toBeInTheDocument();
+    expect(container.querySelector(`[data-seat="${demoGame.selfId}"]`)).toBeInTheDocument();
+    expect(
+      screen.getByRole("article", { name: /Maya, 5 cards left, Show/ }),
+    ).toHaveAttribute("data-seat", "maya");
+  });
+
+  it("still shows every Show card immediately during a deal, including reduced motion", () => {
+    const play = demoGame.table.at(-1)!;
+    const tableMotion = {
+      showDeal: {
+        playId: play.id,
+        actorId: play.playerId,
+        cardIds: play.cards.map((card) => card.id),
+      },
+      pulseKey: 1,
+    };
+    const { container, rerender } = render(
+      <GameTable
+        state={demoGame}
+        logOpen={false}
+        onToggleLog={vi.fn()}
+        onCloseLog={vi.fn()}
+        tableMotion={tableMotion}
+      />,
+    );
+    expect(container.querySelectorAll(".card-deal")).toHaveLength(play.cards.length);
+
+    const matchMedia = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      configurable: true,
+      value: (query: string) => ({
+        matches: query.includes("prefers-reduced-motion"),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        onchange: null,
+      }),
+    });
+    rerender(
+      <GameTable
+        state={demoGame}
+        logOpen={false}
+        onToggleLog={vi.fn()}
+        onCloseLog={vi.fn()}
+        tableMotion={tableMotion}
+      />,
+    );
+    expect(container.querySelectorAll(".card-deal")).toHaveLength(play.cards.length);
+    expect(container.querySelectorAll(".card-deal .card-wrap")).toHaveLength(
+      play.cards.length,
+    );
+    window.matchMedia = matchMedia;
+  });
+
+  it("pulses live points and captions a Scout award", () => {
+    const { container } = render(
+      <>
+        <OpponentStrip state={demoGame} pulsingPlayerId="maya" />
+        <GameTable
+          state={demoGame}
+          logOpen={false}
+          onToggleLog={vi.fn()}
+          onCloseLog={vi.fn()}
+          tableMotion={{
+            scoutAward: { ownerId: "maya" },
             caption: "Maya earns +1 Scout",
             pulseKey: 1,
+            pulsingPlayerId: "maya",
           }}
         />
       </>,
     );
-    expect(screen.getByText("+1 SCOUT")).toBeInTheDocument();
-    expect(screen.getByText("Maya earns +1 Scout")).toBeInTheDocument();
+    expect(screen.getAllByText("Maya earns +1 Scout").length).toBeGreaterThan(0);
     expect(container.querySelector(".you-scout-line")).toHaveTextContent("2 Scout");
-    expect(container.querySelector(".scout-award-float")).toHaveTextContent("+1");
+    expect(container.querySelector(".opponent .is-points-pulse")).toHaveTextContent(
+      "17 pts",
+    );
   });
 });
