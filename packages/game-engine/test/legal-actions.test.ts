@@ -101,14 +101,17 @@ describe("legal action selectors", () => {
     expect(combined.disabledReason).toBeUndefined();
     expect(combined.actions.length).toBeGreaterThan(0);
     expect(combined.options.length).toBeGreaterThan(0);
-    expect(
-      combined.options.every((option) =>
-        option.ranges.some((range) => range.legal),
-      ),
-    ).toBe(true);
+    expect(combined.actions.every((action) => action.flipped)).toBe(true);
     expect(
       new Set(combined.options.map((option) => option.scout.flipped)),
-    ).toEqual(new Set([true]));
+    ).toEqual(new Set([false, true]));
+    expect(
+      combined.options.some(
+        (option) =>
+          option.scout.flipped === false &&
+          !option.ranges.some((range) => range.legal),
+      ),
+    ).toBe(true);
   });
 
   it("reports own-show and two-player chip prohibitions", () => {

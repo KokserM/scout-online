@@ -473,7 +473,7 @@ describe("GameScreen action hints", () => {
     });
   });
 
-  it("offers only projected legal orientations before Scout & Show insertion", () => {
+  it("offers both Scout orientations before Scout & Show insertion", () => {
     const state = {
       ...demoGame,
       availableActions: {
@@ -516,11 +516,11 @@ describe("GameScreen action hints", () => {
       screen.getByRole("button", { name: "Use value 6" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Use value 5" }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Use value 5" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Choose a gap" })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use value 6" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use value 5" }));
     expect(screen.getByRole("button", { name: "Choose a gap" })).toBeEnabled();
   });
 });

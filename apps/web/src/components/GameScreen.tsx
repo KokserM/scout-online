@@ -219,18 +219,9 @@ export function GameScreen({
           ),
         ]
       : state.availableActions.scout.endpoints;
-  const legalFlips = (endpoint: "start" | "end") =>
-    scoutFlow?.kind === "scout-and-show"
-      ? [
-          ...new Set(
-            state.availableActions.scoutAndShow.options
-              .filter((option) => option.position === endpoint)
-              .map((option) => option.flipped),
-          ),
-        ]
-      : state.availableActions.scout.flipped;
+  const availableFlips = state.availableActions.scout.flipped;
   const chooseEndpoint = (endpoint: "start" | "end") => {
-    if (legalFlips(endpoint).length > 0) {
+    if (availableFlips.length > 0) {
       setScoutFlow(
         (flow) => flow && { kind: flow.kind, endpoint, stage: "orientation" },
       );
@@ -238,15 +229,24 @@ export function GameScreen({
   };
   const canInsertAt = (insertionIndex: number) => {
     if (!scoutFlow?.endpoint || scoutFlow.flipped === undefined) return false;
-    return scoutFlow.kind === "scout-and-show"
-      ? state.availableActions.scoutAndShow.options.some(
-          (option) =>
-            option.position === scoutFlow.endpoint &&
-            option.insertAt === insertionIndex &&
-            option.flipped === scoutFlow.flipped,
-        )
-      : insertionIndex < state.availableActions.scout.insertionCount &&
-          state.availableActions.scout.flipped.includes(scoutFlow.flipped);
+    if (scoutFlow.kind !== "scout-and-show") {
+      return (
+        insertionIndex < state.availableActions.scout.insertionCount &&
+        state.availableActions.scout.flipped.includes(scoutFlow.flipped)
+      );
+    }
+    const matching = state.availableActions.scoutAndShow.options.filter(
+      (option) =>
+        option.position === scoutFlow.endpoint &&
+        option.flipped === scoutFlow.flipped,
+    );
+    if (matching.length === 0) {
+      return (
+        insertionIndex < state.availableActions.scout.insertionCount &&
+        state.availableActions.scout.flipped.includes(scoutFlow.flipped)
+      );
+    }
+    return matching.some((option) => option.insertAt === insertionIndex);
   };
   const chooseInsertion = (insertionIndex: number) => {
     if (!canInsertAt(insertionIndex)) return;
@@ -388,9 +388,7 @@ export function GameScreen({
             isSelected={selection.isSelected}
             getCardProps={selection.getCardProps}
             canInsertAt={canInsertAt}
-            availableFlips={
-              scoutFlow.endpoint ? legalFlips(scoutFlow.endpoint) : []
-            }
+            availableFlips={availableFlips}
             onEndpoint={chooseEndpoint}
             onOrientation={(flipped) =>
               setScoutFlow((flow) => flow && { ...flow, flipped })

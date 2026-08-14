@@ -109,7 +109,7 @@ describe("real Socket.IO transport with the real game engine", () => {
 
     const combinedActor = seatForActive(table);
     expect(
-      combinedActor.state!.availableActions.scoutAndShow.options.every(
+      combinedActor.state!.availableActions.scoutAndShow.options.some(
         (candidate) => candidate.showRanges.some((range) => range.legal),
       ),
     ).toBe(true);

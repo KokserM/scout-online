@@ -288,7 +288,6 @@ function projectAvailableActions(
     AvailableActions["scoutAndShow"]["options"][number]
   >();
   for (const option of selected.scoutAndShow.options) {
-    if (!option.ranges.some((range) => range.legal)) continue;
     const action = option.scout;
     const position = action.side === "left" ? "start" : "end";
     const activeShow = game.round.activeShow;

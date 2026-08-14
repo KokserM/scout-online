@@ -133,6 +133,35 @@ describe("VOSU Show values", () => {
 });
 
 describe("VOSU Scout & Show", () => {
+  it("offers both orientations when opposite mode makes the other flip legal", () => {
+    let state = createRoundFromHands(
+      {
+        a: [card(5, 8), card(5, 9), card(1, 10)],
+        b: [card(1, 3)],
+        c: [card(2, 4)],
+      },
+      ["a", "b", "c"],
+      "a",
+      "standard",
+      "vosu",
+    );
+    state = applyRoundAction(state, "a", {
+      type: "show",
+      start: 0,
+      end: 1,
+      valueMode: "active",
+    });
+
+    const combined = selectLegalActions(state, "b").scoutAndShow;
+    expect(combined.disabledReason).toBeUndefined();
+    expect(
+      new Set(combined.options.map((option) => option.scout.flipped)),
+    ).toEqual(new Set([false, true]));
+    expect(new Set(combined.actions.map((action) => action.flipped))).toEqual(
+      new Set([false, true]),
+    );
+  });
+
   it("keeps Scout & Show unlimited in standard rounds", () => {
     let state = createRoundFromHands(
       {

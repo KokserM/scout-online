@@ -144,10 +144,10 @@ function enumerateScoutAndShowActions(
       remainingShow(state, scout.side),
       state.rulesMode,
     );
+    options.push({ scout, ranges });
     if (!ranges.some((range) => range.legal)) {
       continue;
     }
-    options.push({ scout, ranges });
     for (const range of ranges) {
       if (!range.legal) {
         continue;
